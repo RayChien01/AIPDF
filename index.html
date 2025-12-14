@@ -5,22 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Reader + Gemini AI (Smart Context)</title>
     
-    <!-- PDF.js -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
     
-    <!-- KaTeX for Math Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 
     <style>
-        /* Modified sidebar-width to 33vw (approx 1/3 of screen) */
-        :root { --page-width-percent: 80%; --sidebar-width: 33vw; }
+        /* Layout Variables */
+        :root { --page-width-percent: 80%; --sidebar-width: 35vw; }
         
         body { background:#333; margin:0; padding:0; display:flex; flex-direction:row; height:100vh; font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:white; overflow:hidden; }
+        
+        /* Main Area (PDF Viewer) */
         #main-area { flex:1; display:flex; flex-direction:column; height:100%; position:relative; transition:width .3s ease; overflow:hidden; }
         #controls { width:100%; height:60px; background:#1e1e1e; display:flex; align-items:center; justify-content:center; gap:15px; z-index:2000; box-shadow:0 4px 12px rgba(0,0,0,0.5); flex-shrink:0; border-bottom:1px solid #444; }
         #pdf-scroller { flex:1; overflow-y:auto; overflow-x:auto; display:flex; flex-direction:column; align-items:stretch; position:relative; width:100%; background:#333; scroll-behavior: auto; }
+        
+        /* Control Buttons */
         .control-group { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:8px; }
         button { background:#555; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:14px; transition:.2s; white-space:nowrap; }
         button:hover { background:#777; }
@@ -31,10 +33,14 @@
         input[type="number"] { width:50px; padding:5px; border-radius:4px; border:1px solid #555; background:#222; color:white; text-align:center; }
         #zoom-percent { min-width:40px; text-align:center; font-weight:bold; font-size:13px; color:#ddd; }
 
+        /* Sidebar */
         #ai-sidebar { width:var(--sidebar-width); background:#252526; border-left:1px solid #444; display:flex; flex-direction:column; height:100%; box-shadow:-4px 0 15px rgba(0,0,0,0.3); z-index:3000; transition:width .3s ease; overflow:hidden; }
         body.sidebar-hidden #ai-sidebar { width:0; border-left:none; }
         body.sidebar-hidden #ai-sidebar > * { display:none; }
+        
         .sidebar-header { padding:10px 15px; background:#1e1e1e; border-bottom:1px solid #333; font-weight:bold; display:flex; justify-content:space-between; align-items:center; height:50px; box-sizing:border-box; }
+        
+        /* Settings Panel */
         #settings-panel { display:block; background:#2d2d2d; border-bottom:1px solid #444; transition:max-height .3s ease-out, opacity .3s ease-out; overflow:hidden; max-height:500px; opacity:1; }
         #settings-panel.collapsed { max-height:0; opacity:0; border-bottom:none; padding:0; }
         .settings-section { padding:10px 15px; display:flex; flex-direction:column; gap:10px; border-bottom:1px solid #3a3a3a; }
@@ -46,36 +52,51 @@
         .context-mode-group label { cursor:pointer; display:flex; align-items:center; gap:4px; }
         .context-mode-group label.highlight { color: #4fc1ff; font-weight: bold; }
 
-        /* Custom Range Inputs Styling */
         #custom-range-wrapper { display:flex; align-items:center; gap:8px; margin-top:5px; padding:8px; background:#222; border-radius:4px; border:1px solid #444; transition: all 0.2s; }
         #custom-range-wrapper.hidden { display:none !important; }
         .range-input { width:60px !important; }
         .range-label { font-size:12px; color:#bbb; }
 
+        /* Chat Area */
         #chat-container { flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column; gap:15px; }
         .message { padding:10px; border-radius:8px; font-size:14px; line-height:1.4; max-width:90%; word-wrap:break-word; }
         .message.user { background:#0e639c; align-self:flex-end; color:white; }
         .message.ai { background:#3c3c3c; align-self:flex-start; color:#e0e0e0; }
         .message.system { background:transparent; color:#888; font-size:12px; text-align:center; align-self:center; }
         .message.error { background:rgba(255,0,0,0.2); color:#ffcccc; align-self:center; border:1px solid #ff4444; }
-        .input-area { padding:15px; background:#1e1e1e; border-top:1px solid #333; display:flex; gap:10px; }
-        #user-input { flex:1; padding:10px; border-radius:4px; border:1px solid #444; background:#333; color:white; resize:none; height:40px; font-family:inherit; }
-        #send-btn { background:#0e639c; height:40px; align-self:flex-start; }
-
-        #viewer-container { margin-top:20px; width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:20px; padding:0 20px 100px; box-sizing:border-box; }
-        .page-placeholder { background:#fff; box-shadow:0 4px 15px rgba(0,0,0,0.5); width:var(--page-width-percent); max-width:5000px; min-width:300px; position:relative; margin:0 auto; }
-        .pdf-page-canvas { display:block; width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; }
-        .textLayer { position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; opacity:1; line-height:1.0; z-index:2; }
-        .textLayer span, .textLayer br { color:transparent; cursor:text; position:absolute; white-space:pre; transform-origin:0% 0%; }
-        .textLayer ::selection { background-color:rgba(0,102,255,0.5); color:transparent; }
-        .loading-msg { display:flex; align-items:center; justify-content:center; height:100%; color:#888; font-size:14px; background:#444; position:relative; z-index:0; }
-        .page-number-label { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 8px; border-radius:4px; font-size:12px; pointer-events:none; z-index:10; }
-
+        
         .message.ai strong { color:#fff; font-weight:bold; }
         .message.ai code { background:#222; padding:2px 4px; border-radius:3px; font-family:monospace; }
         .message.ai pre { background:#222; padding:10px; border-radius:4px; overflow-x:auto; }
         .message.ai ul { padding-left:20px; }
+
+        /* Input Area - UPDATED DESIGN */
+        .input-area { padding:15px; background:#1e1e1e; border-top:1px solid #333; display:flex; gap:8px; align-items:flex-start; }
+        #user-input { flex:1; padding:10px; border-radius:4px; border:1px solid #444; background:#333; color:white; resize:none; height:45px; font-family:inherit; font-size:13px; }
+        #user-input:focus { border-color:#0e639c; outline:none; }
         
+        /* Action Buttons */
+        .action-btn-group { display:flex; flex-direction:column; gap:5px; }
+        #send-btn { background:#0e639c; height:auto; padding:8px 10px; font-size:12px; flex:1; }
+        #translate-btn { background:#2ea043; height:auto; padding:8px 10px; font-size:12px; flex:1; }
+        #translate-btn:hover { background:#3fb950; }
+        #grab-btn { background:#444; border:1px solid #555; color:#ccc; height:45px; width:35px; padding:0; display:flex; align-items:center; justify-content:center; font-size:18px; }
+        #grab-btn:hover { background:#555; color:white; }
+
+        /* PDF Viewer Styling */
+        #viewer-container { margin-top:20px; width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:20px; padding:0 20px 100px; box-sizing:border-box; }
+        .page-placeholder { background:#fff; box-shadow:0 4px 15px rgba(0,0,0,0.5); width:var(--page-width-percent); max-width:5000px; min-width:300px; position:relative; margin:0 auto; }
+        .pdf-page-canvas { display:block; width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; }
+        .textLayer { position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; opacity:1; line-height:1.0; z-index:2; cursor:text; }
+        .textLayer span, .textLayer br { color:transparent; cursor:text; position:absolute; white-space:pre; transform-origin:0% 0%; }
+        
+        /* HIGH CONTRAST SELECTION (Updated) */
+        .textLayer ::selection { background-color: rgba(255, 255, 0, 0.4); color: transparent; }
+        .textLayer ::-moz-selection { background-color: rgba(255, 255, 0, 0.4); color: transparent; }
+
+        .loading-msg { display:flex; align-items:center; justify-content:center; height:100%; color:#888; font-size:14px; background:#444; position:relative; z-index:0; }
+        .page-number-label { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 8px; border-radius:4px; font-size:12px; pointer-events:none; z-index:10; }
+
         /* Math/LaTeX Styles */
         .katex { font-size: 1.1em !important; }
         .katex-display { overflow-x: auto; padding: 10px 0; }
@@ -124,9 +145,8 @@
             <input type="password" id="api-key-input" placeholder="Paste Gemini API Key">
             <select id="model-select">
                 <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Standard/Fast)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Reasoning Enhanced)</option>
-                <option value="gemini-3.0-pro-exp">Gemini 3.0 Pro (Exp/Preview)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash (Stable)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Reasoning)</option>
                 <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy)</option>
             </select>
         </div>
@@ -139,7 +159,6 @@
                 <label><input type="radio" name="context-mode" value="all"> Full PDF</label>
             </div>
             
-            <!-- NEW: Separate inputs wrapper, hidden by default unless Custom is selected -->
             <div id="custom-range-wrapper" class="hidden">
                 <span class="range-label">From:</span>
                 <input type="number" id="custom-start" class="range-input" min="1" placeholder="Start">
@@ -154,14 +173,19 @@
     <div id="chat-container">
         <div class="message system">
             Welcome!<br>
-            Default: <b>Auto Context (Current ± 3 pages)</b>.<br>
-            Scroll to any page and ask a question.
+            <b>Ask</b>: Questions about the PDF.<br>
+            <b>Translate</b>: Translates selected text (or typed text) into Traditional Chinese.<br>
+            <b>Paste (📋)</b>: Grabs selected text into input box.
         </div>
     </div>
 
     <div class="input-area">
-        <textarea id="user-input" placeholder="Ask a question about the current pages..."></textarea>
-        <button id="send-btn">Send</button>
+        <button id="grab-btn" title="Paste Selection from PDF">📋</button>
+        <textarea id="user-input" placeholder="Select text & click Translate, or type here..."></textarea>
+        <div class="action-btn-group">
+            <button id="send-btn">Ask</button>
+            <button id="translate-btn">Translate</button>
+        </div>
     </div>
 </div>
 
@@ -179,10 +203,11 @@ let currentWidthPercent=80;
 const chatContainer=document.getElementById('chat-container');
 const userInput=document.getElementById('user-input');
 const sendBtn=document.getElementById('send-btn');
+const translateBtn=document.getElementById('translate-btn');
+const grabBtn=document.getElementById('grab-btn');
 const apiKeyInput=document.getElementById('api-key-input');
 const modelSelect=document.getElementById('model-select');
 
-// New Input Elements
 const customStartInput = document.getElementById('custom-start');
 const customEndInput = document.getElementById('custom-end');
 const customRangeWrapper = document.getElementById('custom-range-wrapper');
@@ -204,7 +229,6 @@ pdfScroller.addEventListener('wheel',(e)=>{ if(e.shiftKey){ e.preventDefault(); 
 toggleSidebarBtn.addEventListener('click',()=>{ document.body.classList.toggle('sidebar-hidden'); const hidden=document.body.classList.contains('sidebar-hidden'); toggleSidebarBtn.classList.toggle('active-toggle',!hidden); toggleSidebarBtn.style.opacity=hidden?"0.7":"1"; });
 toggleSettingsBtn.addEventListener('click',()=>settingsPanel.classList.toggle('collapsed'));
 
-// --- TOGGLE INPUT VISIBILITY LOGIC ---
 contextModeInputs.forEach(input => {
     input.addEventListener('change', () => {
         if(input.value === 'custom') {
@@ -215,16 +239,23 @@ contextModeInputs.forEach(input => {
     });
 });
 
-// --- RENDER MESSAGE WITH MATH SUPPORT ---
+// --- HELPER: GET CLEAN SELECTION ---
+function getCleanSelection() {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+        // Remove line breaks from PDF copy/paste
+        return selection.toString().trim().replace(/(\r\n|\n|\r)/gm, " ");
+    }
+    return "";
+}
+
+// --- RENDER MESSAGE ---
 function addMessage(text,type){
     const div=document.createElement('div');
     div.className=`message ${type}`;
     
     if(type==='ai'){
-        // 1. Parse Markdown
         div.innerHTML = marked.parse(text);
-        
-        // 2. Render Math (KaTeX)
         if(window.renderMathInElement) {
             renderMathInElement(div, {
                 delimiters: [
@@ -244,14 +275,13 @@ function addMessage(text,type){
     chatContainer.scrollTop=chatContainer.scrollHeight;
 }
 
-// --- UPDATED CONTEXT LOGIC ---
+// --- CONTEXT LOGIC ---
 function getSelectedContextText(){
     if(!pdfDoc) return null;
     const mode=document.querySelector('input[name="context-mode"]:checked').value;
 
     if(mode==='none') return {text:"",desc:"No file content included"};
     
-    // Auto/Dynamic Mode
     if(mode==='dynamic'){
         const start = Math.max(1, currentVisiblePage - 3);
         const end = Math.min(pdfDoc.numPages, currentVisiblePage + 3);
@@ -268,7 +298,6 @@ function getSelectedContextText(){
         return {text:fullText,desc:`Full Text (${pdfDoc.numPages} pages)`};
     }
     
-    // Custom Mode (New Dual Input Logic)
     if(mode==='custom'){
         let start = parseInt(customStartInput.value);
         let end = parseInt(customEndInput.value);
@@ -276,45 +305,26 @@ function getSelectedContextText(){
         if(isNaN(start) || isNaN(end)) return {text:"", desc:"Invalid page numbers"};
         if(start < 1) start = 1;
         if(end > pdfDoc.numPages) end = pdfDoc.numPages;
-        if(start > end) { const temp=start; start=end; end=temp; } // Swap if start > end
+        if(start > end) { const temp=start; start=end; end=temp; } 
 
         let combined="";
-        let count=0;
         for(let i=start; i<=end; i++){
-            if(pdfPageTexts[i]) {
-                combined += `[Page ${i}]\n${pdfPageTexts[i]}\n\n`;
-                count++;
-            }
+            if(pdfPageTexts[i]) combined += `[Page ${i}]\n${pdfPageTexts[i]}\n\n`;
         }
         return {text:combined,desc:`Custom: Pages ${start}-${end}`};
     }
     return {text:"",desc:"Unknown Mode"};
 }
 
-async function callGeminiAPI(query){
+async function callGeminiAPI(promptText, displayDesc){
     const apiKey=apiKeyInput.value.trim(), modelName=modelSelect.value;
     if(!apiKey){ addMessage("Please enter your API Key first.","system"); return; }
     
-    const ctx=getSelectedContextText(); 
-    
-    // --- Math Instruction ---
-    const mathInstruction = "IMPORTANT: For any mathematical formulas or equations, you MUST use LaTeX formatting (e.g., $E=mc^2$ or $$ \\int x dx $$). Do not use plain text for math.";
-    
-    let promptText="";
-    
-    if(ctx&&ctx.text){
-        promptText=`You are a helpful study assistant. ${mathInstruction} The user is currently looking at page ${currentVisiblePage}. Below is the context from the PDF (${ctx.desc}):\n\n--- Start Context ---\n${ctx.text}\n--- End Context ---\n\nQuestion: ${query}`;
-        addMessage(`Thinking... (${ctx.desc} / ${modelName})`,"system");
-    } else if(ctx && !ctx.text && ctx.desc !== "No file content included") {
-        addMessage(`Error: ${ctx.desc}. Context empty.`,"error");
-        return;
-    } else {
-        promptText=`${mathInstruction}\n\nQuestion: ${query}`;
-        addMessage(`Thinking... (No context / ${modelName})`,"system");
-    }
-
     if(document.body.classList.contains('sidebar-hidden')){document.body.classList.remove('sidebar-hidden');toggleSidebarBtn.classList.add('active-toggle');toggleSidebarBtn.style.opacity="1";}
+    
+    addMessage(`Thinking... (${displayDesc})`,"system");
     const loadingMsg=chatContainer.lastElementChild;
+    
     try{
         const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,{
             method:'POST',headers:{'Content-Type':'application/json'},
@@ -323,8 +333,7 @@ async function callGeminiAPI(query){
         const data=await resp.json();
         if(loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
         if(data.error){
-            if(data.error.code===404) addMessage(`Model Error: ${modelName} not found or key invalid.`,"error");
-            else addMessage(`API Error: ${data.error.message}`,"error");
+            addMessage(`API Error: ${data.error.message}`,"error");
         } else if(data.candidates && data.candidates[0].content){
             addMessage(data.candidates[0].content.parts[0].text,"ai");
         } else addMessage("Empty response.","system");
@@ -334,9 +343,104 @@ async function callGeminiAPI(query){
     }
 }
 
-sendBtn.addEventListener('click',()=>{const t=userInput.value.trim(); if(t){addMessage(t,"user"); userInput.value=''; callGeminiAPI(t);} });
-userInput.addEventListener('keypress',(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendBtn.click(); }});
+// --- BUTTON LISTENERS ---
 
+// 1. ASK BUTTON (Standard Query)
+sendBtn.addEventListener('click',()=>{
+    const t=userInput.value.trim(); 
+    if(!t) { alert("Please type a question."); return; }
+    
+    addMessage(t,"user"); 
+    userInput.value=''; 
+    
+    const ctx = getSelectedContextText();
+    const mathInstruction = "IMPORTANT: For any mathematical formulas, use LaTeX formatting (e.g., $E=mc^2$).";
+    let promptText = "";
+    let displayDesc = "";
+    
+    if(ctx && ctx.text){
+        promptText=`You are a helpful study assistant. ${mathInstruction}\nThe user is reading page ${currentVisiblePage}. Context (${ctx.desc}):\n\n--- Start Context ---\n${ctx.text}\n--- End Context ---\n\nQuestion: ${t}`;
+        displayDesc = ctx.desc;
+    } else {
+        promptText=`${mathInstruction}\n\nQuestion: ${t}`;
+        displayDesc = "No Context";
+    }
+    
+    callGeminiAPI(promptText, displayDesc);
+});
+
+// 2. TRANSLATE BUTTON (Smart: Selection OR Input)
+translateBtn.addEventListener('click', () => {
+    let text = userInput.value.trim();
+    let source = "User Input";
+
+    // Auto-Grab Logic: If input is empty, grab PDF selection
+    if (!text) {
+        text = getCleanSelection();
+        if (text) {
+            source = "Selected Text";
+            addMessage(`[Target for Translation]\n"${text}"`, "system"); // Visual feedback
+        }
+    }
+
+    if (!text) {
+        alert("Please select text in the PDF or type something to translate.");
+        return;
+    }
+
+    userInput.value = ''; // Clear input
+
+    // Translation Prompt
+    const ctx = getSelectedContextText();
+    const contextStr = (ctx && ctx.text) ? `\n\nReference Context from PDF:\n${ctx.text}` : "";
+    
+    const translationPrompt = `
+    Please act as a professional technical translator and English tutor.
+    Task: Translate the user's text into Traditional Chinese (Taiwan).
+    
+    Constraints:
+    1. Output format must be clean and structured (Markdown).
+    2. Use the provided Reference Context (if any) to resolve technical terms.
+    
+    Required Output Format:
+    **1. Sentence-by-Sentence Translation** (逐句翻譯):
+    > [Original English Sentence]
+    > [Traditional Chinese Translation]
+    (Repeat for all sentences)
+
+    **2. Learning Notes** (重點單字與句型):
+    * **[Word/Phrase]**: [Meaning in this context]. [Explanation of grammar or usage if complex].
+
+    Text to Translate:
+    """
+    ${text}
+    """
+    ${contextStr}
+    `;
+
+    callGeminiAPI(translationPrompt, `Translation / ${source}`);
+});
+
+// 3. GRAB BUTTON (Paste Selection)
+grabBtn.addEventListener('click', () => {
+    const text = getCleanSelection();
+    if (text) {
+        userInput.value = text;
+        userInput.focus();
+    } else {
+        alert("No text selected in the PDF.");
+    }
+});
+
+// Enter Key: Defaults to "Ask" (Send)
+userInput.addEventListener('keypress',(e)=>{ 
+    if(e.key==='Enter'&&!e.shiftKey){ 
+        e.preventDefault(); 
+        sendBtn.click(); 
+    }
+});
+
+// --- PDF PROCESSING ---
 async function extractAllText(pdf){
     addMessage("Parsing PDF text in background...","system");
     const loadingMsg=chatContainer.lastElementChild;
@@ -491,7 +595,6 @@ async function renderPage(pageNum){
         const renderScale=getRenderScale();
         const pixelWidth=Math.floor(viewport.width * renderScale);
         const pixelHeight=Math.floor(viewport.height * renderScale);
-        if(pixelWidth > MAX_CANVAS_DIMENSION || pixelHeight > MAX_CANVAS_DIMENSION) console.warn("Canvas limit warning");
 
         const frag=document.createDocumentFragment();
         const label=document.createElement('div');

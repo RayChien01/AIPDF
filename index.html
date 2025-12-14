@@ -3,772 +3,534 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Reader + Gemini AI (Fixed Bar & Collapsible Settings)</title>
+    <title>PDF Reader + Gemini AI (Smart Context)</title>
+    
+    <!-- PDF.js -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    
+    <!-- KaTeX for Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
     <style>
-        :root {
-            --page-width-percent: 80%;
-            --sidebar-width: 380px;
-        }
-
-        body {
-            background-color: #333;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: row;
-            height: 100vh;
-            font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: white;
-            overflow: hidden;
-        }
-
-        /* --- Main Area Layout --- */
-        #main-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column; /* Vertical stack */
-            height: 100%;
-            position: relative;
-            transition: width 0.3s ease;
-            overflow: hidden; /* Prevent body scroll */
-        }
-
-        /* Fixed Controls Bar */
-        #controls {
-            width: 100%;
-            height: 60px;
-            background: #1e1e1e; /* Solid background */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-            z-index: 2000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            flex-shrink: 0; /* Prevent shrinking */
-            border-bottom: 1px solid #444;
-        }
-
-        /* PDF Scroll Container (This is what scrolls now) */
-        #pdf-scroller {
-            flex: 1;
-            overflow-y: auto; /* Scrollbar appears here */
-            overflow-x: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-            width: 100%;
-            background-color: #333;
-        }
-
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(255,255,255,0.1);
-            padding: 5px 10px;
-            border-radius: 8px;
-        }
-
-        button {
-            background: #555;
-            color: white;
-            border: none;
-            padding: 5px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: 0.2s;
-            white-space: nowrap;
-        }
-        button:hover { background: #777; }
-        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        /* Modified sidebar-width to 33vw (approx 1/3 of screen) */
+        :root { --page-width-percent: 80%; --sidebar-width: 33vw; }
         
-        button.active-toggle { background: #0e639c; }
-        button.icon-btn { padding: 5px 8px; background: transparent; font-size: 16px; }
-        button.icon-btn:hover { background: rgba(255,255,255,0.1); }
+        body { background:#333; margin:0; padding:0; display:flex; flex-direction:row; height:100vh; font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:white; overflow:hidden; }
+        #main-area { flex:1; display:flex; flex-direction:column; height:100%; position:relative; transition:width .3s ease; overflow:hidden; }
+        #controls { width:100%; height:60px; background:#1e1e1e; display:flex; align-items:center; justify-content:center; gap:15px; z-index:2000; box-shadow:0 4px 12px rgba(0,0,0,0.5); flex-shrink:0; border-bottom:1px solid #444; }
+        #pdf-scroller { flex:1; overflow-y:auto; overflow-x:auto; display:flex; flex-direction:column; align-items:stretch; position:relative; width:100%; background:#333; scroll-behavior: auto; }
+        .control-group { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:8px; }
+        button { background:#555; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:14px; transition:.2s; white-space:nowrap; }
+        button:hover { background:#777; }
+        button:disabled { background:#444; color:#888; cursor:not-allowed; }
+        button.active-toggle { background:#0e639c; }
+        button.icon-btn { padding:5px 8px; background:transparent; font-size:16px; }
+        button.icon-btn:hover { background:rgba(255,255,255,0.1); }
+        input[type="number"] { width:50px; padding:5px; border-radius:4px; border:1px solid #555; background:#222; color:white; text-align:center; }
+        #zoom-percent { min-width:40px; text-align:center; font-weight:bold; font-size:13px; color:#ddd; }
 
-        input[type="number"] {
-            width: 50px;
-            padding: 5px;
-            border-radius: 4px;
-            border: 1px solid #555;
-            background: #222;
-            color: white;
-            text-align: center;
-        }
+        #ai-sidebar { width:var(--sidebar-width); background:#252526; border-left:1px solid #444; display:flex; flex-direction:column; height:100%; box-shadow:-4px 0 15px rgba(0,0,0,0.3); z-index:3000; transition:width .3s ease; overflow:hidden; }
+        body.sidebar-hidden #ai-sidebar { width:0; border-left:none; }
+        body.sidebar-hidden #ai-sidebar > * { display:none; }
+        .sidebar-header { padding:10px 15px; background:#1e1e1e; border-bottom:1px solid #333; font-weight:bold; display:flex; justify-content:space-between; align-items:center; height:50px; box-sizing:border-box; }
+        #settings-panel { display:block; background:#2d2d2d; border-bottom:1px solid #444; transition:max-height .3s ease-out, opacity .3s ease-out; overflow:hidden; max-height:500px; opacity:1; }
+        #settings-panel.collapsed { max-height:0; opacity:0; border-bottom:none; padding:0; }
+        .settings-section { padding:10px 15px; display:flex; flex-direction:column; gap:10px; border-bottom:1px solid #3a3a3a; }
+        .settings-section:last-child { border-bottom:none; }
+        #api-key-input, #model-select { width:100%; padding:8px; background:#333; border:1px solid #555; color:white; border-radius:4px; font-size:12px; box-sizing:border-box; }
+        #model-select option { background:#333; color:white; padding:5px; }
         
-        #zoom-percent {
-            min-width: 40px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 13px;
-            color: #ddd;
-        }
+        .context-mode-group { display:flex; gap:10px; font-size:12px; flex-wrap:wrap; }
+        .context-mode-group label { cursor:pointer; display:flex; align-items:center; gap:4px; }
+        .context-mode-group label.highlight { color: #4fc1ff; font-weight: bold; }
 
-        /* --- AI Sidebar --- */
-        #ai-sidebar {
-            width: var(--sidebar-width);
-            background: #252526;
-            border-left: 1px solid #444;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            box-shadow: -4px 0 15px rgba(0,0,0,0.3);
-            z-index: 3000;
-            transition: margin-right 0.3s ease, transform 0.3s ease, width 0.3s ease;
-            overflow: hidden;
-        }
+        /* Custom Range Inputs Styling */
+        #custom-range-wrapper { display:flex; align-items:center; gap:8px; margin-top:5px; padding:8px; background:#222; border-radius:4px; border:1px solid #444; transition: all 0.2s; }
+        #custom-range-wrapper.hidden { display:none !important; }
+        .range-input { width:60px !important; }
+        .range-label { font-size:12px; color:#bbb; }
+
+        #chat-container { flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column; gap:15px; }
+        .message { padding:10px; border-radius:8px; font-size:14px; line-height:1.4; max-width:90%; word-wrap:break-word; }
+        .message.user { background:#0e639c; align-self:flex-end; color:white; }
+        .message.ai { background:#3c3c3c; align-self:flex-start; color:#e0e0e0; }
+        .message.system { background:transparent; color:#888; font-size:12px; text-align:center; align-self:center; }
+        .message.error { background:rgba(255,0,0,0.2); color:#ffcccc; align-self:center; border:1px solid #ff4444; }
+        .input-area { padding:15px; background:#1e1e1e; border-top:1px solid #333; display:flex; gap:10px; }
+        #user-input { flex:1; padding:10px; border-radius:4px; border:1px solid #444; background:#333; color:white; resize:none; height:40px; font-family:inherit; }
+        #send-btn { background:#0e639c; height:40px; align-self:flex-start; }
+
+        #viewer-container { margin-top:20px; width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:20px; padding:0 20px 100px; box-sizing:border-box; }
+        .page-placeholder { background:#fff; box-shadow:0 4px 15px rgba(0,0,0,0.5); width:var(--page-width-percent); max-width:5000px; min-width:300px; position:relative; margin:0 auto; }
+        .pdf-page-canvas { display:block; width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; }
+        .textLayer { position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; opacity:1; line-height:1.0; z-index:2; }
+        .textLayer span, .textLayer br { color:transparent; cursor:text; position:absolute; white-space:pre; transform-origin:0% 0%; }
+        .textLayer ::selection { background-color:rgba(0,102,255,0.5); color:transparent; }
+        .loading-msg { display:flex; align-items:center; justify-content:center; height:100%; color:#888; font-size:14px; background:#444; position:relative; z-index:0; }
+        .page-number-label { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 8px; border-radius:4px; font-size:12px; pointer-events:none; z-index:10; }
+
+        .message.ai strong { color:#fff; font-weight:bold; }
+        .message.ai code { background:#222; padding:2px 4px; border-radius:3px; font-family:monospace; }
+        .message.ai pre { background:#222; padding:10px; border-radius:4px; overflow-x:auto; }
+        .message.ai ul { padding-left:20px; }
         
-        body.sidebar-hidden #ai-sidebar {
-            width: 0;
-            border-left: none;
-        }
-        
-        body.sidebar-hidden #ai-sidebar > * { display: none; }
-
-        .sidebar-header {
-            padding: 10px 15px;
-            background: #1e1e1e;
-            border-bottom: 1px solid #333;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 50px; /* Fixed height matching controls roughly */
-            box-sizing: border-box;
-        }
-
-        /* Settings Container (Collapsible) */
-        #settings-panel {
-            display: block; /* Default shown */
-            background: #2d2d2d;
-            border-bottom: 1px solid #444;
-            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
-            overflow: hidden;
-            max-height: 500px; /* Arbitrary large height for animation */
-            opacity: 1;
-        }
-        
-        #settings-panel.collapsed {
-            max-height: 0;
-            opacity: 0;
-            border-bottom: none;
-            padding: 0;
-        }
-
-        .settings-section {
-            padding: 10px 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        .settings-section:last-child { border-bottom: none; }
-
-        #api-key-input, #model-select, #page-range-input {
-            width: 100%;
-            padding: 8px;
-            background: #333;
-            border: 1px solid #555;
-            color: white;
-            border-radius: 4px;
-            font-size: 12px;
-            box-sizing: border-box;
-        }
-        
-        #model-select option { background: #333; color: white; padding: 5px; }
-
-        .context-mode-group {
-            display: flex;
-            gap: 10px;
-            font-size: 12px;
-            flex-wrap: wrap;
-        }
-        .context-mode-group label {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .quick-actions { display: flex; gap: 5px; }
-        .quick-actions button { flex: 1; font-size: 11px; background: #0e639c; }
-        .quick-actions button:hover { background: #1177bb; }
-
-        /* Chat Display Area */
-        #chat-container {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .message {
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 14px;
-            line-height: 1.4;
-            max-width: 90%;
-            word-wrap: break-word;
-        }
-        .message.user { background: #0e639c; align-self: flex-end; color: white; }
-        .message.ai { background: #3c3c3c; align-self: flex-start; color: #e0e0e0; }
-        .message.system { background: transparent; color: #888; font-size: 12px; text-align: center; align-self: center; }
-        .message.error { background: rgba(255, 0, 0, 0.2); color: #ffcccc; align-self: center; border: 1px solid #ff4444; }
-
-        .input-area {
-            padding: 15px;
-            background: #1e1e1e;
-            border-top: 1px solid #333;
-            display: flex;
-            gap: 10px;
-        }
-        #user-input {
-            flex: 1;
-            padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #444;
-            background: #333;
-            color: white;
-            resize: none;
-            height: 40px;
-            font-family: inherit;
-        }
-        #send-btn { background: #0e639c; height: 40px; align-self: flex-start; }
-        
-        /* --- Viewer Container --- */
-        #viewer-container {
-            margin-top: 20px; 
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            padding-bottom: 100px;
-        }
-
-        /* --- PDF Page Styles --- */
-        .page-placeholder {
-            background-color: white; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            width: var(--page-width-percent);
-            max-width: 5000px; 
-            min-width: 300px;
-            position: relative;
-        }
-        .pdf-page-canvas { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
-        .textLayer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; opacity: 1; line-height: 1.0; z-index: 2; }
-        .textLayer span, .textLayer br { color: transparent; cursor: text; position: absolute; white-space: pre; transform-origin: 0% 0%; }
-        .textLayer ::selection { background-color: rgba(0, 102, 255, 0.5); color: transparent; }
-        
-        .loading-msg {
-            display: flex; align-items: center; justify-content: center; height: 100%;
-            color: #888; font-size: 14px; background: #444; position: relative; z-index: 0;
-        }
-        .page-number-label {
-            position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.5);
-            color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 10;
-        }
-        
-        /* Markdown Styles */
-        .message.ai strong { color: #fff; font-weight: bold; }
-        .message.ai code { background: #222; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
-        .message.ai pre { background: #222; padding: 10px; border-radius: 4px; overflow-x: auto; }
-        .message.ai ul { padding-left: 20px; }
+        /* Math/LaTeX Styles */
+        .katex { font-size: 1.1em !important; }
+        .katex-display { overflow-x: auto; padding: 10px 0; }
     </style>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 
-    <div id="main-area">
-        <!-- Control Bar (Fixed) -->
-        <div id="controls">
-            <input type="file" id="file-input" accept="application/pdf">
-            <span id="page-info" style="font-size: 14px; color: #ccc;">No file selected</span>
-
-            <div class="control-group">
-                <span>Zoom:</span>
-                <button id="zoom-out">-</button>
-                <span id="zoom-percent">80%</span>
-                <button id="zoom-in">+</button>
-            </div>
-
-            <div class="control-group">
-                <span>Go to:</span>
-                <input type="number" id="jump-input" min="1" placeholder="#">
-                <button id="jump-btn">Go</button>
-            </div>
-
-            <div class="control-group" style="margin-left: auto; margin-right: 15px;">
-                <button id="toggle-sidebar-btn" class="active-toggle">Sidebar</button>
-            </div>
+<div id="main-area">
+    <div id="controls">
+        <input type="file" id="file-input" accept="application/pdf">
+        <span id="page-info" style="font-size:14px; color:#ccc;">No file selected</span>
+        <div class="control-group">
+            <span>Zoom:</span>
+            <button id="zoom-out">-</button>
+            <span id="zoom-percent">80%</span>
+            <button id="zoom-in">+</button>
         </div>
-
-        <!-- Scrollable Area for PDF -->
-        <div id="pdf-scroller">
-            <div id="viewer-container">
-                <div style="color: #888; margin-top: 50px;">Please select a PDF file to begin.</div>
-            </div>
+        <div class="control-group">
+            <span>Go to:</span>
+            <input type="number" id="jump-input" min="1" placeholder="#">
+            <button id="jump-btn">Go</button>
+        </div>
+        <div class="control-group" style="margin-left:auto; margin-right:15px;">
+            <button id="toggle-sidebar-btn" class="active-toggle">Sidebar</button>
         </div>
     </div>
 
-    <div id="ai-sidebar">
-        <div class="sidebar-header">
-            <span>Gemini AI Assistant</span>
-            <button id="toggle-settings-btn" class="icon-btn" title="Toggle Settings">⚙️</button>
+    <div id="pdf-scroller">
+        <div id="viewer-container">
+            <div style="color:#888; margin-top:50px;">Please select a PDF file to begin.</div>
         </div>
-        
-        <!-- Collapsible Settings Panel -->
-        <div id="settings-panel">
-            <div class="settings-section">
-                <input type="password" id="api-key-input" placeholder="Paste Gemini API Key">
-                <select id="model-select">
-                    <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Standard/Fast)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Reasoning Enhanced)</option>
-                    <option value="gemini-3.0-pro-exp">Gemini 3.0 Pro (Exp/Preview)</option>
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Stable)</option>
-                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy)</option>
-                </select>
-            </div>
+    </div>
+</div>
 
-            <div class="settings-section">
-                <div style="font-size: 12px; color: #bbb; margin-bottom: 5px;">Context Range (Sent to AI):</div>
-                
-                <div class="context-mode-group">
-                    <label><input type="radio" name="context-mode" value="none"> None</label>
-                    <label><input type="radio" name="context-mode" value="custom" checked> Custom Pages</label>
-                    <label><input type="radio" name="context-mode" value="all"> Full (Caution)</label>
-                </div>
-
-                <input type="text" id="page-range-input" placeholder="e.g.: 1-5, 10, 20-25">
-                
-                <div class="quick-actions">
-                    <button id="btn-context-current-3">Set: Current ± 3 Pages</button>
-                </div>
-                <div id="context-status" style="font-size: 10px; color: #888; margin-top:5px;"></div>
-            </div>
+<div id="ai-sidebar">
+    <div class="sidebar-header">
+        <span>Gemini AI Assistant</span>
+        <button id="toggle-settings-btn" class="icon-btn" title="Toggle Settings">⚙️</button>
+    </div>
+    <div id="settings-panel">
+        <div class="settings-section">
+            <input type="password" id="api-key-input" placeholder="Paste Gemini API Key">
+            <select id="model-select">
+                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Standard/Fast)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Reasoning Enhanced)</option>
+                <option value="gemini-3.0-pro-exp">Gemini 3.0 Pro (Exp/Preview)</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Stable)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy)</option>
+            </select>
         </div>
-
-        <div id="chat-container">
-            <div class="message system">
-                Welcome!<br>
-                Default model: <b>Gemini 2.5 Flash</b>.<br>
-                Click ⚙️ to hide settings.
+        <div class="settings-section">
+            <div style="font-size:12px; color:#bbb; margin-bottom:5px;">Context Strategy:</div>
+            <div class="context-mode-group">
+                <label class="highlight"><input type="radio" name="context-mode" value="dynamic" checked> Auto (Curr ± 3)</label>
+                <label><input type="radio" name="context-mode" value="custom"> Custom Range</label>
+                <label><input type="radio" name="context-mode" value="none"> None</label>
+                <label><input type="radio" name="context-mode" value="all"> Full PDF</label>
             </div>
-        </div>
-
-        <div class="input-area">
-            <textarea id="user-input" placeholder="Ask a question..."></textarea>
-            <button id="send-btn">Send</button>
+            
+            <!-- NEW: Separate inputs wrapper, hidden by default unless Custom is selected -->
+            <div id="custom-range-wrapper" class="hidden">
+                <span class="range-label">From:</span>
+                <input type="number" id="custom-start" class="range-input" min="1" placeholder="Start">
+                <span class="range-label">To:</span>
+                <input type="number" id="custom-end" class="range-input" min="1" placeholder="End">
+            </div>
+            
+            <div id="context-status" style="font-size:10px; color:#888; margin-top:5px;"></div>
         </div>
     </div>
 
-    <script>
-        // === Global Variables ===
-        let pdfDoc = null;
-        let pdfPageTexts = []; 
-        let currentVisiblePage = 1; 
+    <div id="chat-container">
+        <div class="message system">
+            Welcome!<br>
+            Default: <b>Auto Context (Current ± 3 pages)</b>.<br>
+            Scroll to any page and ask a question.
+        </div>
+    </div>
+
+    <div class="input-area">
+        <textarea id="user-input" placeholder="Ask a question about the current pages..."></textarea>
+        <button id="send-btn">Send</button>
+    </div>
+</div>
+
+<script>
+let pdfDoc=null, pdfPageTexts=[], currentVisiblePage=1;
+const MAX_CANVAS_DIMENSION=4096;
+const MIN_ZOOM=30, MAX_ZOOM=400;
+const container=document.getElementById('viewer-container');
+const pdfScroller=document.getElementById('pdf-scroller');
+const fileInput=document.getElementById('file-input');
+const pageInfo=document.getElementById('page-info');
+const jumpInput=document.getElementById('jump-input');
+let currentWidthPercent=80;
+
+const chatContainer=document.getElementById('chat-container');
+const userInput=document.getElementById('user-input');
+const sendBtn=document.getElementById('send-btn');
+const apiKeyInput=document.getElementById('api-key-input');
+const modelSelect=document.getElementById('model-select');
+
+// New Input Elements
+const customStartInput = document.getElementById('custom-start');
+const customEndInput = document.getElementById('custom-end');
+const customRangeWrapper = document.getElementById('custom-range-wrapper');
+const contextModeInputs = document.querySelectorAll('input[name="context-mode"]');
+
+const contextStatus=document.getElementById('context-status');
+const zoomPercentLabel=document.getElementById('zoom-percent');
+const toggleSidebarBtn=document.getElementById('toggle-sidebar-btn');
+const toggleSettingsBtn=document.getElementById('toggle-settings-btn');
+const settingsPanel=document.getElementById('settings-panel');
+
+const pageStates={}; 
+const visiblePages=new Set();
+const renderQueue=[];
+let isRendering=false;
+
+pdfScroller.addEventListener('wheel',(e)=>{ if(e.shiftKey){ e.preventDefault(); pdfScroller.scrollLeft+=e.deltaY; }},{passive:false});
+
+toggleSidebarBtn.addEventListener('click',()=>{ document.body.classList.toggle('sidebar-hidden'); const hidden=document.body.classList.contains('sidebar-hidden'); toggleSidebarBtn.classList.toggle('active-toggle',!hidden); toggleSidebarBtn.style.opacity=hidden?"0.7":"1"; });
+toggleSettingsBtn.addEventListener('click',()=>settingsPanel.classList.toggle('collapsed'));
+
+// --- TOGGLE INPUT VISIBILITY LOGIC ---
+contextModeInputs.forEach(input => {
+    input.addEventListener('change', () => {
+        if(input.value === 'custom') {
+            customRangeWrapper.classList.remove('hidden');
+        } else {
+            customRangeWrapper.classList.add('hidden');
+        }
+    });
+});
+
+// --- RENDER MESSAGE WITH MATH SUPPORT ---
+function addMessage(text,type){
+    const div=document.createElement('div');
+    div.className=`message ${type}`;
+    
+    if(type==='ai'){
+        // 1. Parse Markdown
+        div.innerHTML = marked.parse(text);
         
-        const MAX_CANVAS_DIMENSION = 4096;
-        const RENDER_SCALE_MULTIPLIER = 2.0; 
-
-        const container = document.getElementById('viewer-container');
-        const pdfScroller = document.getElementById('pdf-scroller'); // New scroller reference
-        const fileInput = document.getElementById('file-input');
-        const pageInfo = document.getElementById('page-info');
-        const jumpInput = document.getElementById('jump-input');
-        
-        let currentWidthPercent = 80;
-
-        // --- UI Elements ---
-        const chatContainer = document.getElementById('chat-container');
-        const userInput = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
-        const apiKeyInput = document.getElementById('api-key-input');
-        const modelSelect = document.getElementById('model-select');
-        const pageRangeInput = document.getElementById('page-range-input');
-        const contextStatus = document.getElementById('context-status');
-        const zoomPercentLabel = document.getElementById('zoom-percent');
-        const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
-        const toggleSettingsBtn = document.getElementById('toggle-settings-btn');
-        const settingsPanel = document.getElementById('settings-panel');
-
-        // --- Sidebar & Settings Toggles ---
-        toggleSidebarBtn.addEventListener('click', () => {
-            document.body.classList.toggle('sidebar-hidden');
-            const isHidden = document.body.classList.contains('sidebar-hidden');
-            
-            if (isHidden) {
-                toggleSidebarBtn.classList.remove('active-toggle');
-                toggleSidebarBtn.style.opacity = "0.7";
-            } else {
-                toggleSidebarBtn.classList.add('active-toggle');
-                toggleSidebarBtn.style.opacity = "1";
-            }
-        });
-
-        toggleSettingsBtn.addEventListener('click', () => {
-            settingsPanel.classList.toggle('collapsed');
-            // Visual feedback could be added here if needed
-        });
-
-        function addMessage(text, type) {
-            const div = document.createElement('div');
-            div.className = `message ${type}`;
-            if (type === 'ai') {
-                div.innerHTML = marked.parse(text); 
-            } else {
-                div.textContent = text;
-            }
-            chatContainer.appendChild(div);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        // --- Context Logic ---
-        function getSelectedContextText() {
-            if (!pdfDoc) return null;
-            const mode = document.querySelector('input[name="context-mode"]:checked').value;
-            
-            if (mode === 'none') return { text: "", desc: "No file content included" };
-
-            if (mode === 'all') {
-                let fullText = pdfPageTexts.slice(1).map((text, idx) => `[Page ${idx+1}]\n${text}`).join('\n\n');
-                if(fullText.length > 5000000) fullText = fullText.substring(0, 5000000) + "...(Truncated)";
-                return { text: fullText, desc: `Full Text (${pdfDoc.numPages} pages)` };
-            }
-
-            if (mode === 'custom') {
-                const rangeStr = pageRangeInput.value.trim();
-                if (!rangeStr) return { text: "", desc: "No range specified, question only" };
-
-                const pagesToInclude = new Set();
-                const parts = rangeStr.split(/[,，]/);
-                parts.forEach(part => {
-                    part = part.trim();
-                    if (part.includes('-')) {
-                        const [start, end] = part.split('-').map(Number);
-                        if (!isNaN(start) && !isNaN(end)) {
-                            for (let i = start; i <= end; i++) pagesToInclude.add(i);
-                        }
-                    } else {
-                        const num = Number(part);
-                        if (!isNaN(num)) pagesToInclude.add(num);
-                    }
-                });
-
-                let combinedText = "";
-                let count = 0;
-                const sortedPages = Array.from(pagesToInclude).sort((a,b) => a-b);
-                sortedPages.forEach(p => {
-                    if (p >= 1 && p < pdfPageTexts.length) {
-                        combinedText += `[Page ${p}]\n${pdfPageTexts[p] || "(Blank Page)"}\n\n`;
-                        count++;
-                    }
-                });
-                
-                if (count === 0) return { text: "", desc: "Selected pages are empty" };
-                return { text: combinedText, desc: `Selected ${count} pages (${sortedPages.join(', ')})` };
-            }
-            return { text: "", desc: "Unknown Mode" };
-        }
-
-        document.getElementById('btn-context-current-3').addEventListener('click', () => {
-            if (!pdfDoc) return;
-            const start = Math.max(1, currentVisiblePage - 3);
-            const end = Math.min(pdfDoc.numPages, currentVisiblePage + 3);
-            pageRangeInput.value = `${start}-${end}`;
-            document.querySelector('input[value="custom"]').checked = true;
-            contextStatus.textContent = `Range set: ${start} - ${end}`;
-            setTimeout(() => contextStatus.textContent = "", 3000);
-        });
-
-        // --- API Call ---
-        async function callGeminiAPI(query) {
-            const apiKey = apiKeyInput.value.trim();
-            const modelName = modelSelect.value; 
-
-            if (!apiKey) {
-                addMessage("Please enter your API Key first.", "system");
-                return;
-            }
-
-            const contextData = getSelectedContextText();
-            let promptText = "";
-
-            if (contextData && contextData.text) {
-                promptText = `
-                You are a professional study assistant. Below is a snippet from a PDF textbook provided by the user (Range: ${contextData.desc}):
-                
-                --- Document Start ---
-                ${contextData.text}
-                --- Document End ---
-                
-                Please answer the following question based on the content above.
-                Question: ${query}
-                `;
-                addMessage(`Thinking... (${contextData.desc} / Model: ${modelName})`, "system");
-            } else {
-                promptText = query;
-                addMessage(`Thinking... (No context / Model: ${modelName})`, "system");
-            }
-
-            // Ensure sidebar is open
-            if (document.body.classList.contains('sidebar-hidden')) {
-                document.body.classList.remove('sidebar-hidden');
-                toggleSidebarBtn.classList.add('active-toggle');
-                toggleSidebarBtn.style.opacity = "1";
-            }
-
-            const loadingMsg = chatContainer.lastElementChild;
-
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: promptText }] }]
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
-
-                if (data.error) {
-                    if (data.error.code === 404) {
-                        addMessage(`Error (404): Model <b>${modelName}</b> not found.
-                        <br>Cause: API Key permissions or model availability.
-                        <br>Suggestion: Try <b>Gemini 2.0 Flash</b> or <b>1.5 Flash</b>.`, "error");
-                    } else {
-                        addMessage(`API Error: ${data.error.message}`, "error");
-                    }
-                } else if (data.candidates && data.candidates[0].content) {
-                    const aiText = data.candidates[0].content.parts[0].text;
-                    addMessage(aiText, "ai");
-                } else {
-                    addMessage("API response structure error. Please try again.", "system");
-                }
-
-            } catch (error) {
-                if (loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
-                addMessage(`Request Failed: ${error.message}`, "error");
-            }
-        }
-
-        sendBtn.addEventListener('click', () => {
-            const text = userInput.value.trim();
-            if (text) {
-                addMessage(text, "user");
-                userInput.value = '';
-                callGeminiAPI(text);
-            }
-        });
-        
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
-        });
-
-        // --- PDF Processing ---
-        async function extractAllText(pdf) {
-            addMessage("Parsing PDF text in background...", "system");
-            const loadingMsg = chatContainer.lastElementChild;
-            pdfPageTexts = new Array(pdf.numPages + 1).fill("");
-            
-            try {
-                const batchSize = 10;
-                for (let i = 1; i <= pdf.numPages; i+=batchSize) {
-                    const promises = [];
-                    for(let j=0; j<batchSize && (i+j) <= pdf.numPages; j++){
-                        promises.push(pdf.getPage(i+j).then(page => 
-                            page.getTextContent().then(content => {
-                                pdfPageTexts[i+j] = content.items.map(item => item.str).join(' ');
-                            })
-                        ));
-                    }
-                    await Promise.all(promises);
-                }
-                chatContainer.removeChild(loadingMsg);
-                addMessage(`Parsing complete (${pdf.numPages} pages).`, "system");
-            } catch (e) {
-                if (loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
-                addMessage(`Parsing failed: ${e.message}`, "system");
-            }
-        }
-
-        document.getElementById('zoom-in').addEventListener('click', () => changeZoom(10));
-        document.getElementById('zoom-out').addEventListener('click', () => changeZoom(-10));
-
-        function changeZoom(delta) {
-            const newWidth = currentWidthPercent + delta;
-            if (newWidth < 20 || newWidth > 500) return; 
-            currentWidthPercent = newWidth;
-            
-            document.documentElement.style.setProperty('--page-width-percent', `${currentWidthPercent}%`);
-            zoomPercentLabel.textContent = `${currentWidthPercent}%`;
-
-            document.querySelectorAll('.page-placeholder').forEach(div => {
-                if(div.querySelector('canvas')) {
-                    div.innerHTML = `<div class="loading-msg">Page ${div.dataset.pageNum}</div><div class="page-number-label">${div.dataset.pageNum}</div>`;
-                    observer.unobserve(div);
-                    observer.observe(div);
-                }
+        // 2. Render Math (KaTeX)
+        if(window.renderMathInElement) {
+            renderMathInElement(div, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '\\[', right: '\\]', display: true}
+                ],
+                throwOnError: false
             });
         }
+    } else {
+        div.textContent = text;
+    }
+    
+    chatContainer.appendChild(div);
+    chatContainer.scrollTop=chatContainer.scrollHeight;
+}
 
-        fileInput.addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const fileReader = new FileReader();
-            fileReader.onload = function() { loadPDF(new Uint8Array(this.result)); };
-            fileReader.readAsArrayBuffer(file);
+// --- UPDATED CONTEXT LOGIC ---
+function getSelectedContextText(){
+    if(!pdfDoc) return null;
+    const mode=document.querySelector('input[name="context-mode"]:checked').value;
+
+    if(mode==='none') return {text:"",desc:"No file content included"};
+    
+    // Auto/Dynamic Mode
+    if(mode==='dynamic'){
+        const start = Math.max(1, currentVisiblePage - 3);
+        const end = Math.min(pdfDoc.numPages, currentVisiblePage + 3);
+        let combined="";
+        for(let i=start; i<=end; i++){
+            if(pdfPageTexts[i]) combined += `[Page ${i}]\n${pdfPageTexts[i]}\n\n`;
+        }
+        return {text:combined, desc:`Auto: Pages ${start}-${end}`};
+    }
+
+    if(mode==='all'){
+        let fullText=pdfPageTexts.slice(1).map((t,i)=>`[Page ${i+1}]\n${t}`).join('\n\n');
+        if(fullText.length>5000000) fullText=fullText.slice(0,5000000)+"...(Truncated)";
+        return {text:fullText,desc:`Full Text (${pdfDoc.numPages} pages)`};
+    }
+    
+    // Custom Mode (New Dual Input Logic)
+    if(mode==='custom'){
+        let start = parseInt(customStartInput.value);
+        let end = parseInt(customEndInput.value);
+        
+        if(isNaN(start) || isNaN(end)) return {text:"", desc:"Invalid page numbers"};
+        if(start < 1) start = 1;
+        if(end > pdfDoc.numPages) end = pdfDoc.numPages;
+        if(start > end) { const temp=start; start=end; end=temp; } // Swap if start > end
+
+        let combined="";
+        let count=0;
+        for(let i=start; i<=end; i++){
+            if(pdfPageTexts[i]) {
+                combined += `[Page ${i}]\n${pdfPageTexts[i]}\n\n`;
+                count++;
+            }
+        }
+        return {text:combined,desc:`Custom: Pages ${start}-${end}`};
+    }
+    return {text:"",desc:"Unknown Mode"};
+}
+
+async function callGeminiAPI(query){
+    const apiKey=apiKeyInput.value.trim(), modelName=modelSelect.value;
+    if(!apiKey){ addMessage("Please enter your API Key first.","system"); return; }
+    
+    const ctx=getSelectedContextText(); 
+    
+    // --- Math Instruction ---
+    const mathInstruction = "IMPORTANT: For any mathematical formulas or equations, you MUST use LaTeX formatting (e.g., $E=mc^2$ or $$ \\int x dx $$). Do not use plain text for math.";
+    
+    let promptText="";
+    
+    if(ctx&&ctx.text){
+        promptText=`You are a helpful study assistant. ${mathInstruction} The user is currently looking at page ${currentVisiblePage}. Below is the context from the PDF (${ctx.desc}):\n\n--- Start Context ---\n${ctx.text}\n--- End Context ---\n\nQuestion: ${query}`;
+        addMessage(`Thinking... (${ctx.desc} / ${modelName})`,"system");
+    } else if(ctx && !ctx.text && ctx.desc !== "No file content included") {
+        addMessage(`Error: ${ctx.desc}. Context empty.`,"error");
+        return;
+    } else {
+        promptText=`${mathInstruction}\n\nQuestion: ${query}`;
+        addMessage(`Thinking... (No context / ${modelName})`,"system");
+    }
+
+    if(document.body.classList.contains('sidebar-hidden')){document.body.classList.remove('sidebar-hidden');toggleSidebarBtn.classList.add('active-toggle');toggleSidebarBtn.style.opacity="1";}
+    const loadingMsg=chatContainer.lastElementChild;
+    try{
+        const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({contents:[{parts:[{text:promptText}]}]})
         });
+        const data=await resp.json();
+        if(loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
+        if(data.error){
+            if(data.error.code===404) addMessage(`Model Error: ${modelName} not found or key invalid.`,"error");
+            else addMessage(`API Error: ${data.error.message}`,"error");
+        } else if(data.candidates && data.candidates[0].content){
+            addMessage(data.candidates[0].content.parts[0].text,"ai");
+        } else addMessage("Empty response.","system");
+    }catch(err){
+        if(loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
+        addMessage(`Network Error: ${err.message}`,"error");
+    }
+}
 
-        async function loadPDF(data) {
-            container.innerHTML = '<div style="color:white; margin-top:50px;">Loading PDF structure...</div>';
-            try {
-                pdfDoc = await pdfjsLib.getDocument(data).promise;
-                pageInfo.textContent = `${pdfDoc.numPages} Pages`;
-                jumpInput.max = pdfDoc.numPages;
-                container.innerHTML = '';
-                
-                extractAllText(pdfDoc);
+sendBtn.addEventListener('click',()=>{const t=userInput.value.trim(); if(t){addMessage(t,"user"); userInput.value=''; callGeminiAPI(t);} });
+userInput.addEventListener('keypress',(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendBtn.click(); }});
 
-                const firstPage = await pdfDoc.getPage(1);
-                const viewport = firstPage.getViewport({ scale: 1 });
-                const aspectRatio = viewport.height / viewport.width;
-                for (let i = 1; i <= pdfDoc.numPages; i++) {
-                    createPagePlaceholder(i, aspectRatio);
-                }
-                startObserver();
-                
-                pageRangeInput.value = "";
-                document.querySelector('input[value="custom"]').checked = true;
-
-            } catch (error) {
-                container.innerHTML = `<div style="color:red; margin-top:50px;">Error: ${error.message}</div>`;
+async function extractAllText(pdf){
+    addMessage("Parsing PDF text in background...","system");
+    const loadingMsg=chatContainer.lastElementChild;
+    pdfPageTexts=new Array(pdf.numPages+1).fill("");
+    try{
+        const batch=10;
+        for(let i=1;i<=pdf.numPages;i+=batch){
+            const tasks=[];
+            for(let j=0;j<batch&&(i+j)<=pdf.numPages;j++){
+                tasks.push(pdf.getPage(i+j).then(page=>page.getTextContent().then(c=>{
+                    pdfPageTexts[i+j]=c.items.map(it=>it.str).join(' ');
+                })));
             }
+            await Promise.all(tasks);
         }
+        chatContainer.removeChild(loadingMsg);
+        addMessage(`Parsing complete (${pdf.numPages} pages). Ready.`,"system");
+    }catch(e){
+        if(loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
+        addMessage(`Parsing failed: ${e.message}`,"system");
+    }
+}
 
-        function createPagePlaceholder(pageNum, aspectRatio) {
-            const div = document.createElement('div');
-            div.className = 'page-placeholder';
-            div.id = `page-container-${pageNum}`;
-            div.dataset.pageNum = pageNum;
-            div.style.aspectRatio = `${1 / aspectRatio}`; 
-            div.innerHTML = `<div class="loading-msg">Page ${pageNum}</div><div class="page-number-label">${pageNum}</div>`;
-            container.appendChild(div);
-        }
+document.getElementById('zoom-in').addEventListener('click',()=>changeZoom(10));
+document.getElementById('zoom-out').addEventListener('click',()=>changeZoom(-10));
 
-        let observer = null;
-        function startObserver() {
-            if (observer) observer.disconnect();
-            // Changed root from mainArea to pdfScroller because the scrollbar is there now
-            const options = { root: pdfScroller, rootMargin: '100px', threshold: [0, 0.1, 0.5] };
-            
-            observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    const div = entry.target;
-                    const pageNum = parseInt(div.dataset.pageNum);
-                    
-                    if (entry.isIntersecting) {
-                        renderPage(div, pageNum);
-                        if (entry.intersectionRatio > 0.3) {
-                            currentVisiblePage = pageNum;
-                        }
-                    } else {
-                         if (div.querySelector('canvas')) {
-                            div.innerHTML = `<div class="loading-msg">Page ${pageNum}</div><div class="page-number-label">${pageNum}</div>`;
-                        }
-                    }
-                });
-            }, options);
-            document.querySelectorAll('.page-placeholder').forEach(div => observer.observe(div));
-        }
+function changeZoom(delta){
+    const oldWidth = currentWidthPercent;
+    const newWidth = Math.min(Math.max(oldWidth + delta, MIN_ZOOM), MAX_ZOOM);
+    if(newWidth === oldWidth) return;
+    const scroller = pdfScroller;
+    const oldScrollHeight = scroller.scrollHeight;
+    const oldScrollWidth = scroller.scrollWidth;
+    if(oldScrollHeight === 0) {
+        currentWidthPercent = newWidth;
+        document.documentElement.style.setProperty('--page-width-percent', `${currentWidthPercent}%`);
+        zoomPercentLabel.textContent = `${currentWidthPercent}%`;
+        return;
+    }
+    const scrollTop = scroller.scrollTop;
+    const scrollLeft = scroller.scrollLeft;
+    const clientHeight = scroller.clientHeight;
+    const clientWidth = scroller.clientWidth;
+    const centerY = scrollTop + clientHeight / 2;
+    const centerX = scrollLeft + clientWidth / 2;
+    const ratioY = centerY / oldScrollHeight;
+    const ratioX = centerX / oldScrollWidth;
+    currentWidthPercent = newWidth;
+    document.documentElement.style.setProperty('--page-width-percent', `${currentWidthPercent}%`);
+    zoomPercentLabel.textContent = `${currentWidthPercent}%`;
+    visiblePages.forEach(p => {
+        const st = pageStates[p];
+        if(st) st.renderedScale = null;
+        enqueueRender(p);
+    });
+    const newScrollHeight = scroller.scrollHeight;
+    const newScrollWidth = scroller.scrollWidth;
+    scroller.scrollTop = (newScrollHeight * ratioY) - (clientHeight / 2);
+    scroller.scrollLeft = (newScrollWidth * ratioX) - (clientWidth / 2);
+}
 
-        async function renderPage(divContainer, pageNum) {
-            if (divContainer.querySelector('canvas')) return;
-            try {
-                const page = await pdfDoc.getPage(pageNum);
-                const containerWidth = divContainer.clientWidth;
-                const unscaledViewport = page.getViewport({ scale: 1 });
-                const scale = containerWidth / unscaledViewport.width;
-                const viewport = page.getViewport({ scale: scale });
+fileInput.addEventListener('change',async(e)=>{
+    const file=e.target.files[0]; if(!file) return;
+    const fr=new FileReader();
+    fr.onload=function(){ loadPDF(new Uint8Array(this.result)); };
+    fr.readAsArrayBuffer(file);
+});
 
-                divContainer.innerHTML = ''; 
-                const pageNumLabel = document.createElement('div');
-                pageNumLabel.className = 'page-number-label';
-                pageNumLabel.textContent = pageNum;
-                divContainer.appendChild(pageNumLabel);
+async function loadPDF(data){
+    container.innerHTML='<div style="color:white; margin-top:50px;">Loading PDF structure...</div>';
+    try{
+        pdfDoc=await pdfjsLib.getDocument(data).promise;
+        pageInfo.textContent=`${pdfDoc.numPages} Pages`;
+        jumpInput.max=pdfDoc.numPages;
+        container.innerHTML='';
+        extractAllText(pdfDoc);
+        const firstPage=await pdfDoc.getPage(1);
+        const viewport=firstPage.getViewport({scale:1});
+        const aspect=viewport.height/viewport.width;
+        for(let i=1;i<=pdfDoc.numPages;i++) createPagePlaceholder(i,aspect);
+        startObserver();
+    }catch(err){
+        container.innerHTML=`<div style="color:red; margin-top:50px;">Error: ${err.message}</div>`;
+    }
+}
 
-                const canvas = document.createElement('canvas');
-                canvas.className = 'pdf-page-canvas';
-                
-                const outputScale = window.devicePixelRatio || 1; 
-                let transformScale = outputScale * RENDER_SCALE_MULTIPLIER;
-                let pixelWidth = Math.floor(viewport.width * transformScale);
-                let pixelHeight = Math.floor(viewport.height * transformScale);
+function createPagePlaceholder(pageNum,aspect){
+    const div=document.createElement('div');
+    div.className='page-placeholder';
+    div.id=`page-container-${pageNum}`;
+    div.dataset.pageNum=pageNum;
+    div.style.aspectRatio=`${1/aspect}`;
+    div.innerHTML=`<div class="loading-msg">Page ${pageNum}</div><div class="page-number-label">${pageNum}</div>`;
+    container.appendChild(div);
+    pageStates[pageNum]={renderedScale:null,isRendering:false};
+}
 
-                if (pixelWidth > MAX_CANVAS_DIMENSION || pixelHeight > MAX_CANVAS_DIMENSION) {
-                    const maxAllowed = Math.min(MAX_CANVAS_DIMENSION / pixelWidth, MAX_CANVAS_DIMENSION / pixelHeight);
-                    transformScale *= maxAllowed;
-                    pixelWidth = Math.floor(viewport.width * transformScale);
-                    pixelHeight = Math.floor(viewport.height * transformScale);
-                }
-                
-                canvas.width = pixelWidth;
-                canvas.height = pixelHeight;
-                canvas.style.width = Math.floor(viewport.width) + "px";
-                canvas.style.height = Math.floor(viewport.height) + "px";
-                divContainer.appendChild(canvas);
-
-                const renderContext = {
-                    canvasContext: canvas.getContext('2d'),
-                    transform: [transformScale, 0, 0, transformScale, 0, 0],
-                    viewport: viewport
-                };
-                
-                const textContent = await page.getTextContent();
-                const textLayerDiv = document.createElement('div');
-                textLayerDiv.className = 'textLayer';
-                textLayerDiv.style.width = Math.floor(viewport.width) + "px";
-                textLayerDiv.style.height = Math.floor(viewport.height) + "px";
-                divContainer.appendChild(textLayerDiv);
-
-                await page.render(renderContext).promise;
-                pdfjsLib.renderTextLayer({
-                    textContentSource: textContent,
-                    container: textLayerDiv,
-                    viewport: viewport,
-                    textDivs: []
-                });
-
-            } catch (err) {
-                console.error(err);
+let observer=null;
+function startObserver(){
+    if(observer) observer.disconnect();
+    const opts={root:pdfScroller, rootMargin:'200px', threshold:[0,0.1,0.5]};
+    observer=new IntersectionObserver(entries=>{
+        entries.forEach(entry=>{
+            const div=entry.target;
+            const pageNum=parseInt(div.dataset.pageNum);
+            if(entry.isIntersecting){
+                visiblePages.add(pageNum);
+                if(entry.intersectionRatio>0.3) currentVisiblePage=pageNum;
+                enqueueRender(pageNum);
+            } else {
+                visiblePages.delete(pageNum);
             }
-        }
+        });
+    },opts);
+    document.querySelectorAll('.page-placeholder').forEach(div=>observer.observe(div));
+}
 
-        const jumpBtn = document.getElementById('jump-btn');
-        function jumpToPage() {
-            const num = parseInt(jumpInput.value);
-            if (num >= 1 && num <= pdfDoc.numPages) {
-                const target = document.getElementById(`page-container-${num}`);
-                if (target) {
-                    target.scrollIntoView({ behavior: 'auto', block: 'start' });
-                    currentVisiblePage = num;
-                }
-            }
-        }
-        jumpBtn.addEventListener('click', jumpToPage);
-        jumpInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') jumpToPage(); });
-    </script>
+function enqueueRender(pageNum){
+    const st=pageStates[pageNum]; if(!st) return;
+    if(st.isRendering) return;
+    if(st.renderedScale===currentWidthPercent) return;
+    renderQueue.push(pageNum);
+    processRenderQueue();
+}
+
+function processRenderQueue(){
+    if(isRendering) return;
+    const pageNum=renderQueue.shift();
+    if(pageNum===undefined) return;
+    isRendering=true;
+    renderPage(pageNum).finally(()=>{isRendering=false; processRenderQueue();});
+}
+
+function getRenderScale(){
+    const dpr=window.devicePixelRatio||1;
+    const factor=Math.max(1, currentWidthPercent/100);
+    return Math.min(3.0, Math.max(1.0, factor * dpr)); 
+}
+
+async function renderPage(pageNum){
+    const divContainer=document.getElementById(`page-container-${pageNum}`);
+    if(!divContainer) return;
+    const state=pageStates[pageNum]; if(!state) return;
+    if(state.renderedScale === currentWidthPercent) return;
+    state.isRendering=true;
+    try{
+        const page=await pdfDoc.getPage(pageNum);
+        const containerWidth=divContainer.clientWidth;
+        const unscaled=page.getViewport({scale:1});
+        const scale=containerWidth/unscaled.width;
+        const viewport=page.getViewport({scale});
+        const renderScale=getRenderScale();
+        const pixelWidth=Math.floor(viewport.width * renderScale);
+        const pixelHeight=Math.floor(viewport.height * renderScale);
+        if(pixelWidth > MAX_CANVAS_DIMENSION || pixelHeight > MAX_CANVAS_DIMENSION) console.warn("Canvas limit warning");
+
+        const frag=document.createDocumentFragment();
+        const label=document.createElement('div');
+        label.className='page-number-label'; label.textContent=pageNum;
+        frag.appendChild(label);
+
+        const canvas=document.createElement('canvas');
+        canvas.className='pdf-page-canvas';
+        canvas.width=pixelWidth; canvas.height=pixelHeight;
+        canvas.style.width="100%"; canvas.style.height="100%";
+        frag.appendChild(canvas);
+
+        const renderContext={ canvasContext: canvas.getContext('2d'), transform:[renderScale,0,0,renderScale,0,0], viewport };
+        const textContentPromise=page.getTextContent();
+        await page.render(renderContext).promise;
+        
+        const textContent=await textContentPromise;
+        const textLayerDiv=document.createElement('div');
+        textLayerDiv.className='textLayer';
+        textLayerDiv.style.width="100%"; textLayerDiv.style.height="100%";
+        frag.appendChild(textLayerDiv);
+        pdfjsLib.renderTextLayer({ textContentSource:textContent, container:textLayerDiv, viewport, textDivs:[] });
+
+        divContainer.replaceChildren(frag);
+        state.renderedScale=currentWidthPercent;
+    }catch(err){ console.error(err); }
+    finally { state.isRendering=false; }
+}
+
+const jumpBtn=document.getElementById('jump-btn');
+function jumpToPage(){
+    const num=parseInt(jumpInput.value);
+    if(pdfDoc && num>=1 && num<=pdfDoc.numPages){
+        const target=document.getElementById(`page-container-${num}`);
+        if(target){ target.scrollIntoView({behavior:'auto', block:'start'}); currentVisiblePage=num; }
+    }
+}
+jumpBtn.addEventListener('click',jumpToPage);
+jumpInput.addEventListener('keypress',(e)=>{ if(e.key==='Enter') jumpToPage(); });
+</script>
 </body>
 </html>

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Reader + Gemini AI (Smart Context)</title>
+    <title>PDF Reader + Gemini AI (Pixel Perfect Edition)</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
     
@@ -12,17 +12,23 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 
     <style>
-        /* Layout Variables */
+        /* =========================================
+           1. 基礎佈局 (Layout)
+           ========================================= */
         :root { --page-width-percent: 80%; --sidebar-width: 35vw; }
         
         body { background:#333; margin:0; padding:0; display:flex; flex-direction:row; height:100vh; font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:white; overflow:hidden; }
         
-        /* Main Area (PDF Viewer) */
+        /* 左側主畫面 */
         #main-area { flex:1; display:flex; flex-direction:column; height:100%; position:relative; transition:width .3s ease; overflow:hidden; }
+        
+        /* 上方控制列 */
         #controls { width:100%; height:60px; background:#1e1e1e; display:flex; align-items:center; justify-content:center; gap:15px; z-index:2000; box-shadow:0 4px 12px rgba(0,0,0,0.5); flex-shrink:0; border-bottom:1px solid #444; }
+        
+        /* PDF 捲動區 */
         #pdf-scroller { flex:1; overflow-y:auto; overflow-x:auto; display:flex; flex-direction:column; align-items:stretch; position:relative; width:100%; background:#333; scroll-behavior: auto; }
         
-        /* Control Buttons */
+        /* 按鈕與輸入框通用樣式 */
         .control-group { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:8px; }
         button { background:#555; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:14px; transition:.2s; white-space:nowrap; }
         button:hover { background:#777; }
@@ -33,14 +39,16 @@
         input[type="number"] { width:50px; padding:5px; border-radius:4px; border:1px solid #555; background:#222; color:white; text-align:center; }
         #zoom-percent { min-width:40px; text-align:center; font-weight:bold; font-size:13px; color:#ddd; }
 
-        /* Sidebar */
+        /* =========================================
+           2. 右側 AI 側邊欄 (Sidebar)
+           ========================================= */
         #ai-sidebar { width:var(--sidebar-width); background:#252526; border-left:1px solid #444; display:flex; flex-direction:column; height:100%; box-shadow:-4px 0 15px rgba(0,0,0,0.3); z-index:3000; transition:width .3s ease; overflow:hidden; }
         body.sidebar-hidden #ai-sidebar { width:0; border-left:none; }
         body.sidebar-hidden #ai-sidebar > * { display:none; }
         
         .sidebar-header { padding:10px 15px; background:#1e1e1e; border-bottom:1px solid #333; font-weight:bold; display:flex; justify-content:space-between; align-items:center; height:50px; box-sizing:border-box; }
         
-        /* Settings Panel */
+        /* 設定面板 */
         #settings-panel { display:block; background:#2d2d2d; border-bottom:1px solid #444; transition:max-height .3s ease-out, opacity .3s ease-out; overflow:hidden; max-height:500px; opacity:1; }
         #settings-panel.collapsed { max-height:0; opacity:0; border-bottom:none; padding:0; }
         .settings-section { padding:10px 15px; display:flex; flex-direction:column; gap:10px; border-bottom:1px solid #3a3a3a; }
@@ -57,7 +65,7 @@
         .range-input { width:60px !important; }
         .range-label { font-size:12px; color:#bbb; }
 
-        /* Chat Area */
+        /* 聊天顯示區 */
         #chat-container { flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column; gap:15px; }
         .message { padding:10px; border-radius:8px; font-size:14px; line-height:1.4; max-width:90%; word-wrap:break-word; }
         .message.user { background:#0e639c; align-self:flex-end; color:white; }
@@ -70,12 +78,11 @@
         .message.ai pre { background:#222; padding:10px; border-radius:4px; overflow-x:auto; }
         .message.ai ul { padding-left:20px; }
 
-        /* Input Area - UPDATED DESIGN */
+        /* 輸入區 (包含三個按鈕) */
         .input-area { padding:15px; background:#1e1e1e; border-top:1px solid #333; display:flex; gap:8px; align-items:flex-start; }
         #user-input { flex:1; padding:10px; border-radius:4px; border:1px solid #444; background:#333; color:white; resize:none; height:45px; font-family:inherit; font-size:13px; }
         #user-input:focus { border-color:#0e639c; outline:none; }
         
-        /* Action Buttons */
         .action-btn-group { display:flex; flex-direction:column; gap:5px; }
         #send-btn { background:#0e639c; height:auto; padding:8px 10px; font-size:12px; flex:1; }
         #translate-btn { background:#2ea043; height:auto; padding:8px 10px; font-size:12px; flex:1; }
@@ -83,16 +90,77 @@
         #grab-btn { background:#444; border:1px solid #555; color:#ccc; height:45px; width:35px; padding:0; display:flex; align-items:center; justify-content:center; font-size:18px; }
         #grab-btn:hover { background:#555; color:white; }
 
-        /* PDF Viewer Styling */
+        /* =========================================
+           3. PDF 檢視器核心樣式 (Mozilla Firefox Source Code Match)
+           ========================================= */
         #viewer-container { margin-top:20px; width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:20px; padding:0 20px 100px; box-sizing:border-box; }
-        .page-placeholder { background:#fff; box-shadow:0 4px 15px rgba(0,0,0,0.5); width:var(--page-width-percent); max-width:5000px; min-width:300px; position:relative; margin:0 auto; }
-        .pdf-page-canvas { display:block; width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; }
-        .textLayer { position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; opacity:1; line-height:1.0; z-index:2; cursor:text; }
-        .textLayer span, .textLayer br { color:transparent; cursor:text; position:absolute; white-space:pre; transform-origin:0% 0%; }
         
-        /* HIGH CONTRAST SELECTION (Updated) */
-        .textLayer ::selection { background-color: rgba(255, 255, 0, 0.4); color: transparent; }
-        .textLayer ::-moz-selection { background-color: rgba(255, 255, 0, 0.4); color: transparent; }
+        .page-placeholder { 
+            background:#fff; 
+            box-shadow:0 4px 15px rgba(0,0,0,0.5); 
+            width:var(--page-width-percent); 
+            max-width:5000px; 
+            min-width:300px; 
+            position:relative; 
+            margin:0 auto; 
+        }
+
+        .pdf-page-canvas { 
+            display:block; 
+            width:100%; 
+            height:100%; 
+            position:absolute; 
+            top:0; 
+            left:0; 
+            z-index:1; 
+        }
+        
+        /* ---------------------------------------------------------------------------------- */
+        /* [核心修改] 基於 Firefox 原始碼的精準文字層配置 */
+        /* ---------------------------------------------------------------------------------- */
+        .textLayer { 
+            position:absolute; 
+            text-align: initial;
+            top:0; 
+            left:0; 
+            right:0; 
+            bottom:0; 
+            overflow:hidden; 
+            opacity:1; 
+            line-height:1.0;
+            text-size-adjust: none; 
+            forced-color-adjust: none;
+            transform-origin: 0 0;
+            z-index:2; 
+            
+            /* [重要] 鎖定容器的滑鼠事件，只允許選取內部的 span */
+            /* 這能解決「選到行尾空白處」或「右側假空格」的問題 */
+            pointer-events: none; 
+
+            /* 重置字距，避免瀏覽器自作聰明 */
+            letter-spacing: normal;
+            word-spacing: normal;
+        }
+
+        .textLayer span { 
+            color: transparent; 
+            position: absolute; 
+            white-space: pre; 
+            cursor: text;
+            transform-origin: 0% 0%;
+            
+            /* 恢復 span 的滑鼠互動 */
+            pointer-events: auto;
+        }
+
+        /* 讓選取範圍稍微明顯一點，使用 Firefox 風格 */
+        .textLayer ::selection { 
+            background: rgba(0, 0, 255, 0.2); /* 純淨藍色半透明 */
+            color: transparent; 
+        }
+        
+        .textLayer br { display: none; }
+        /* ---------------------------------------------------------------------------------- */
 
         .loading-msg { display:flex; align-items:center; justify-content:center; height:100%; color:#888; font-size:14px; background:#444; position:relative; z-index:0; }
         .page-number-label { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 8px; border-radius:4px; font-size:12px; pointer-events:none; z-index:10; }
@@ -614,7 +682,12 @@ async function renderPage(pageNum){
         const textContent=await textContentPromise;
         const textLayerDiv=document.createElement('div');
         textLayerDiv.className='textLayer';
-        textLayerDiv.style.width="100%"; textLayerDiv.style.height="100%";
+        
+        // [修正] 設定 CSS 變數 --scale-factor 以確保 PDF.js 正確計算字體大小，並移除 Math.floor 避免精度誤差
+        textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
+        textLayerDiv.style.width = `${viewport.width}px`;
+        textLayerDiv.style.height = `${viewport.height}px`;
+        
         frag.appendChild(textLayerDiv);
         pdfjsLib.renderTextLayer({ textContentSource:textContent, container:textLayerDiv, viewport, textDivs:[] });
 

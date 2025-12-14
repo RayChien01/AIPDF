@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF 閱讀器 + Gemini AI (v2.5 無限制版)</title>
+    <title>PDF Reader + Gemini AI (Fixed Bar & Collapsible Settings)</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
     <style>
         :root {
             --page-width-percent: 80%;
-            --sidebar-width: 350px;
+            --sidebar-width: 380px;
         }
 
         body {
@@ -23,32 +23,43 @@
             overflow: hidden;
         }
 
-        /* --- 主區域 (閱讀器) --- */
+        /* --- Main Area Layout --- */
         #main-area {
             flex: 1;
             display: flex;
-            flex-direction: column;
-            align-items: center;
+            flex-direction: column; /* Vertical stack */
             height: 100%;
-            overflow-y: auto;
             position: relative;
+            transition: width 0.3s ease;
+            overflow: hidden; /* Prevent body scroll */
         }
 
-        /* --- 控制列 --- */
+        /* Fixed Controls Bar */
         #controls {
-            position: sticky;
-            top: 0;
             width: 100%;
             height: 60px;
-            background: rgba(30, 30, 30, 0.95);
+            background: #1e1e1e; /* Solid background */
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 15px;
             z-index: 2000;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            backdrop-filter: blur(5px);
-            flex-shrink: 0;
+            flex-shrink: 0; /* Prevent shrinking */
+            border-bottom: 1px solid #444;
+        }
+
+        /* PDF Scroll Container (This is what scrolls now) */
+        #pdf-scroller {
+            flex: 1;
+            overflow-y: auto; /* Scrollbar appears here */
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            width: 100%;
+            background-color: #333;
         }
 
         .control-group {
@@ -69,10 +80,15 @@
             cursor: pointer;
             font-size: 14px;
             transition: 0.2s;
+            white-space: nowrap;
         }
         button:hover { background: #777; }
         button:disabled { background: #444; color: #888; cursor: not-allowed; }
         
+        button.active-toggle { background: #0e639c; }
+        button.icon-btn { padding: 5px 8px; background: transparent; font-size: 16px; }
+        button.icon-btn:hover { background: rgba(255,255,255,0.1); }
+
         input[type="number"] {
             width: 50px;
             padding: 5px;
@@ -82,8 +98,16 @@
             color: white;
             text-align: center;
         }
+        
+        #zoom-percent {
+            min-width: 40px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 13px;
+            color: #ddd;
+        }
 
-        /* --- AI 側邊欄 --- */
+        /* --- AI Sidebar --- */
         #ai-sidebar {
             width: var(--sidebar-width);
             background: #252526;
@@ -93,48 +117,87 @@
             height: 100%;
             box-shadow: -4px 0 15px rgba(0,0,0,0.3);
             z-index: 3000;
+            transition: margin-right 0.3s ease, transform 0.3s ease, width 0.3s ease;
+            overflow: hidden;
         }
+        
+        body.sidebar-hidden #ai-sidebar {
+            width: 0;
+            border-left: none;
+        }
+        
+        body.sidebar-hidden #ai-sidebar > * { display: none; }
 
         .sidebar-header {
-            padding: 15px;
+            padding: 10px 15px;
             background: #1e1e1e;
             border-bottom: 1px solid #333;
             font-weight: bold;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            height: 50px; /* Fixed height matching controls roughly */
+            box-sizing: border-box;
         }
 
-        .api-key-section {
-            padding: 10px;
+        /* Settings Container (Collapsible) */
+        #settings-panel {
+            display: block; /* Default shown */
             background: #2d2d2d;
             border-bottom: 1px solid #444;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            overflow: hidden;
+            max-height: 500px; /* Arbitrary large height for animation */
+            opacity: 1;
+        }
+        
+        #settings-panel.collapsed {
+            max-height: 0;
+            opacity: 0;
+            border-bottom: none;
+            padding: 0;
         }
 
-        #api-key-input {
-            width: 95%;
+        .settings-section {
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .settings-section:last-child { border-bottom: none; }
+
+        #api-key-input, #model-select, #page-range-input {
+            width: 100%;
             padding: 8px;
             background: #333;
             border: 1px solid #555;
             color: white;
             border-radius: 4px;
             font-size: 12px;
+            box-sizing: border-box;
         }
+        
+        #model-select option { background: #333; color: white; padding: 5px; }
 
-        #model-select {
-            width: 100%;
-            padding: 5px;
-            background: #333;
-            border: 1px solid #555;
-            color: white;
-            border-radius: 4px;
+        .context-mode-group {
+            display: flex;
+            gap: 10px;
             font-size: 12px;
+            flex-wrap: wrap;
+        }
+        .context-mode-group label {
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
+        .quick-actions { display: flex; gap: 5px; }
+        .quick-actions button { flex: 1; font-size: 11px; background: #0e639c; }
+        .quick-actions button:hover { background: #1177bb; }
+
+        /* Chat Display Area */
         #chat-container {
             flex: 1;
             padding: 15px;
@@ -152,26 +215,10 @@
             max-width: 90%;
             word-wrap: break-word;
         }
-
-        .message.user {
-            background: #0e639c;
-            align-self: flex-end;
-            color: white;
-        }
-
-        .message.ai {
-            background: #3c3c3c;
-            align-self: flex-start;
-            color: #e0e0e0;
-        }
-
-        .message.system {
-            background: transparent;
-            color: #888;
-            font-size: 12px;
-            text-align: center;
-            align-self: center;
-        }
+        .message.user { background: #0e639c; align-self: flex-end; color: white; }
+        .message.ai { background: #3c3c3c; align-self: flex-start; color: #e0e0e0; }
+        .message.system { background: transparent; color: #888; font-size: 12px; text-align: center; align-self: center; }
+        .message.error { background: rgba(255, 0, 0, 0.2); color: #ffcccc; align-self: center; border: 1px solid #ff4444; }
 
         .input-area {
             padding: 15px;
@@ -180,7 +227,6 @@
             display: flex;
             gap: 10px;
         }
-
         #user-input {
             flex: 1;
             padding: 10px;
@@ -192,15 +238,9 @@
             height: 40px;
             font-family: inherit;
         }
-
-        #send-btn {
-            background: #0e639c;
-            height: 40px;
-            align-self: flex-start;
-        }
-        #send-btn:hover { background: #1177bb; }
-
-        /* --- 閱讀器容器 --- */
+        #send-btn { background: #0e639c; height: 40px; align-self: flex-start; }
+        
+        /* --- Viewer Container --- */
         #viewer-container {
             margin-top: 20px; 
             width: 100%;
@@ -211,7 +251,7 @@
             padding-bottom: 100px;
         }
 
-        /* --- 頁面與文字層樣式 --- */
+        /* --- PDF Page Styles --- */
         .page-placeholder {
             background-color: white; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
@@ -220,78 +260,25 @@
             min-width: 300px;
             position: relative;
         }
-
-        .pdf-page-canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        .textLayer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            overflow: hidden;
-            opacity: 1;
-            line-height: 1.0;
-            z-index: 2;
-        }
-
-        .textLayer span, .textLayer br {
-            color: rgba(0, 0, 0, 0) !important;
-            cursor: text;
-            position: absolute;
-            white-space: pre;
-            transform-origin: 0% 0%;
-        }
-
-        .textLayer ::selection {
-            background-color: rgba(0, 102, 255, 0.5) !important;
-            color: rgba(0, 0, 0, 0) !important;
-        }
-
-        .textLayer span::selection {
-            color: rgba(0, 0, 0, 0) !important;
-            background-color: rgba(0, 102, 255, 0.5) !important;
-        }
-
+        .pdf-page-canvas { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        .textLayer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; opacity: 1; line-height: 1.0; z-index: 2; }
+        .textLayer span, .textLayer br { color: transparent; cursor: text; position: absolute; white-space: pre; transform-origin: 0% 0%; }
+        .textLayer ::selection { background-color: rgba(0, 102, 255, 0.5); color: transparent; }
+        
         .loading-msg {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: #888;
-            font-size: 14px;
-            background: #444;
-            position: relative;
-            z-index: 0;
+            display: flex; align-items: center; justify-content: center; height: 100%;
+            color: #888; font-size: 14px; background: #444; position: relative; z-index: 0;
         }
-        
         .page-number-label {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.5);
-            color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            pointer-events: none;
-            z-index: 10;
+            position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.5);
+            color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 10;
         }
         
-        /* Markdown 樣式簡易支援 */
+        /* Markdown Styles */
         .message.ai strong { color: #fff; font-weight: bold; }
         .message.ai code { background: #222; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
-        .message.ai ul, .message.ai ol { margin: 5px 0 5px 20px; padding: 0; }
         .message.ai pre { background: #222; padding: 10px; border-radius: 4px; overflow-x: auto; }
-        .message.ai blockquote { border-left: 3px solid #555; margin: 5px 0; padding-left: 10px; color: #aaa; }
+        .message.ai ul { padding-left: 20px; }
     </style>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -303,76 +290,136 @@
 <body>
 
     <div id="main-area">
+        <!-- Control Bar (Fixed) -->
         <div id="controls">
             <input type="file" id="file-input" accept="application/pdf">
-            <span id="page-info" style="font-size: 14px; color: #ccc;">未選擇</span>
+            <span id="page-info" style="font-size: 14px; color: #ccc;">No file selected</span>
 
             <div class="control-group">
-                <span>縮放:</span>
+                <span>Zoom:</span>
                 <button id="zoom-out">-</button>
+                <span id="zoom-percent">80%</span>
                 <button id="zoom-in">+</button>
             </div>
 
             <div class="control-group">
-                <span>跳至:</span>
+                <span>Go to:</span>
                 <input type="number" id="jump-input" min="1" placeholder="#">
                 <button id="jump-btn">Go</button>
             </div>
+
+            <div class="control-group" style="margin-left: auto; margin-right: 15px;">
+                <button id="toggle-sidebar-btn" class="active-toggle">Sidebar</button>
+            </div>
         </div>
 
-        <div id="viewer-container">
-            <div style="color: #888; margin-top: 50px;">請選擇檔案以開始閱讀</div>
+        <!-- Scrollable Area for PDF -->
+        <div id="pdf-scroller">
+            <div id="viewer-container">
+                <div style="color: #888; margin-top: 50px;">Please select a PDF file to begin.</div>
+            </div>
         </div>
     </div>
 
     <div id="ai-sidebar">
         <div class="sidebar-header">
-            <span>Gemini AI 助理</span>
+            <span>Gemini AI Assistant</span>
+            <button id="toggle-settings-btn" class="icon-btn" title="Toggle Settings">⚙️</button>
         </div>
         
-        <div class="api-key-section">
-            <input type="password" id="api-key-input" placeholder="貼上您的 Gemini API Key">
-            <select id="model-select" title="選擇 AI 模型版本">
-                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (預設/最新)</option>
-                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Exp</option>
-                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-            </select>
-            <div style="font-size: 10px; color: #888;">Key 僅存於本地記憶體。</div>
+        <!-- Collapsible Settings Panel -->
+        <div id="settings-panel">
+            <div class="settings-section">
+                <input type="password" id="api-key-input" placeholder="Paste Gemini API Key">
+                <select id="model-select">
+                    <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Standard/Fast)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Reasoning Enhanced)</option>
+                    <option value="gemini-3.0-pro-exp">Gemini 3.0 Pro (Exp/Preview)</option>
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Stable)</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Legacy)</option>
+                </select>
+            </div>
+
+            <div class="settings-section">
+                <div style="font-size: 12px; color: #bbb; margin-bottom: 5px;">Context Range (Sent to AI):</div>
+                
+                <div class="context-mode-group">
+                    <label><input type="radio" name="context-mode" value="none"> None</label>
+                    <label><input type="radio" name="context-mode" value="custom" checked> Custom Pages</label>
+                    <label><input type="radio" name="context-mode" value="all"> Full (Caution)</label>
+                </div>
+
+                <input type="text" id="page-range-input" placeholder="e.g.: 1-5, 10, 20-25">
+                
+                <div class="quick-actions">
+                    <button id="btn-context-current-3">Set: Current ± 3 Pages</button>
+                </div>
+                <div id="context-status" style="font-size: 10px; color: #888; margin-top:5px;"></div>
+            </div>
         </div>
 
         <div id="chat-container">
-            <div class="message system">歡迎！<br>已預設使用 <b>Gemini 2.5 Flash</b>。<br>請載入 PDF 並填入 API Key。</div>
+            <div class="message system">
+                Welcome!<br>
+                Default model: <b>Gemini 2.5 Flash</b>.<br>
+                Click ⚙️ to hide settings.
+            </div>
         </div>
 
         <div class="input-area">
-            <textarea id="user-input" placeholder="詢問關於此文件的問題..."></textarea>
-            <button id="send-btn">發送</button>
+            <textarea id="user-input" placeholder="Ask a question..."></textarea>
+            <button id="send-btn">Send</button>
         </div>
     </div>
 
     <script>
-        // === 全域變數 ===
+        // === Global Variables ===
         let pdfDoc = null;
-        let pdfFullText = ""; 
+        let pdfPageTexts = []; 
+        let currentVisiblePage = 1; 
         
         const MAX_CANVAS_DIMENSION = 4096;
         const RENDER_SCALE_MULTIPLIER = 2.0; 
 
         const container = document.getElementById('viewer-container');
+        const pdfScroller = document.getElementById('pdf-scroller'); // New scroller reference
         const fileInput = document.getElementById('file-input');
         const pageInfo = document.getElementById('page-info');
         const jumpInput = document.getElementById('jump-input');
-        const mainArea = document.getElementById('main-area'); 
         
         let currentWidthPercent = 80;
 
-        // --- AI 聊天相關邏輯 ---
+        // --- UI Elements ---
         const chatContainer = document.getElementById('chat-container');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         const apiKeyInput = document.getElementById('api-key-input');
         const modelSelect = document.getElementById('model-select');
+        const pageRangeInput = document.getElementById('page-range-input');
+        const contextStatus = document.getElementById('context-status');
+        const zoomPercentLabel = document.getElementById('zoom-percent');
+        const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+        const toggleSettingsBtn = document.getElementById('toggle-settings-btn');
+        const settingsPanel = document.getElementById('settings-panel');
+
+        // --- Sidebar & Settings Toggles ---
+        toggleSidebarBtn.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-hidden');
+            const isHidden = document.body.classList.contains('sidebar-hidden');
+            
+            if (isHidden) {
+                toggleSidebarBtn.classList.remove('active-toggle');
+                toggleSidebarBtn.style.opacity = "0.7";
+            } else {
+                toggleSidebarBtn.classList.add('active-toggle');
+                toggleSidebarBtn.style.opacity = "1";
+            }
+        });
+
+        toggleSettingsBtn.addEventListener('click', () => {
+            settingsPanel.classList.toggle('collapsed');
+            // Visual feedback could be added here if needed
+        });
 
         function addMessage(text, type) {
             const div = document.createElement('div');
@@ -386,43 +433,104 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        // --- Context Logic ---
+        function getSelectedContextText() {
+            if (!pdfDoc) return null;
+            const mode = document.querySelector('input[name="context-mode"]:checked').value;
+            
+            if (mode === 'none') return { text: "", desc: "No file content included" };
+
+            if (mode === 'all') {
+                let fullText = pdfPageTexts.slice(1).map((text, idx) => `[Page ${idx+1}]\n${text}`).join('\n\n');
+                if(fullText.length > 5000000) fullText = fullText.substring(0, 5000000) + "...(Truncated)";
+                return { text: fullText, desc: `Full Text (${pdfDoc.numPages} pages)` };
+            }
+
+            if (mode === 'custom') {
+                const rangeStr = pageRangeInput.value.trim();
+                if (!rangeStr) return { text: "", desc: "No range specified, question only" };
+
+                const pagesToInclude = new Set();
+                const parts = rangeStr.split(/[,，]/);
+                parts.forEach(part => {
+                    part = part.trim();
+                    if (part.includes('-')) {
+                        const [start, end] = part.split('-').map(Number);
+                        if (!isNaN(start) && !isNaN(end)) {
+                            for (let i = start; i <= end; i++) pagesToInclude.add(i);
+                        }
+                    } else {
+                        const num = Number(part);
+                        if (!isNaN(num)) pagesToInclude.add(num);
+                    }
+                });
+
+                let combinedText = "";
+                let count = 0;
+                const sortedPages = Array.from(pagesToInclude).sort((a,b) => a-b);
+                sortedPages.forEach(p => {
+                    if (p >= 1 && p < pdfPageTexts.length) {
+                        combinedText += `[Page ${p}]\n${pdfPageTexts[p] || "(Blank Page)"}\n\n`;
+                        count++;
+                    }
+                });
+                
+                if (count === 0) return { text: "", desc: "Selected pages are empty" };
+                return { text: combinedText, desc: `Selected ${count} pages (${sortedPages.join(', ')})` };
+            }
+            return { text: "", desc: "Unknown Mode" };
+        }
+
+        document.getElementById('btn-context-current-3').addEventListener('click', () => {
+            if (!pdfDoc) return;
+            const start = Math.max(1, currentVisiblePage - 3);
+            const end = Math.min(pdfDoc.numPages, currentVisiblePage + 3);
+            pageRangeInput.value = `${start}-${end}`;
+            document.querySelector('input[value="custom"]').checked = true;
+            contextStatus.textContent = `Range set: ${start} - ${end}`;
+            setTimeout(() => contextStatus.textContent = "", 3000);
+        });
+
+        // --- API Call ---
         async function callGeminiAPI(query) {
             const apiKey = apiKeyInput.value.trim();
             const modelName = modelSelect.value; 
 
             if (!apiKey) {
-                addMessage("請先在上方輸入 Gemini API Key。", "system");
-                return;
-            }
-            if (!pdfFullText) {
-                addMessage("請先載入 PDF 文件。", "system");
+                addMessage("Please enter your API Key first.", "system");
                 return;
             }
 
-            addMessage(`思考中 (使用 ${modelName})...`, "system");
+            const contextData = getSelectedContextText();
+            let promptText = "";
+
+            if (contextData && contextData.text) {
+                promptText = `
+                You are a professional study assistant. Below is a snippet from a PDF textbook provided by the user (Range: ${contextData.desc}):
+                
+                --- Document Start ---
+                ${contextData.text}
+                --- Document End ---
+                
+                Please answer the following question based on the content above.
+                Question: ${query}
+                `;
+                addMessage(`Thinking... (${contextData.desc} / Model: ${modelName})`, "system");
+            } else {
+                promptText = query;
+                addMessage(`Thinking... (No context / Model: ${modelName})`, "system");
+            }
+
+            // Ensure sidebar is open
+            if (document.body.classList.contains('sidebar-hidden')) {
+                document.body.classList.remove('sidebar-hidden');
+                toggleSidebarBtn.classList.add('active-toggle');
+                toggleSidebarBtn.style.opacity = "1";
+            }
+
             const loadingMsg = chatContainer.lastElementChild;
 
             try {
-                // --- 無字數限制模式 ---
-                // 設定為 1000 萬字元，確保整本書都能送出
-                const maxChars = 10000000; 
-                let contextText = pdfFullText;
-                
-                if (contextText.length > maxChars) {
-                    contextText = contextText.substring(0, maxChars) + "\n...(超過1000萬字，已截斷)...";
-                }
-
-                const promptText = `
-                你是一個專業的 PDF 文件閱讀助理。以下是該文件的完整內容：
-                
-                --- 文件開始 ---
-                ${contextText}
-                --- 文件結束 ---
-                
-                請根據以上內容回答使用者的問題。
-                使用者問題：${query}
-                `;
-
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -436,24 +544,23 @@
                 if (loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
 
                 if (data.error) {
-                    let errorMsg = data.error.message;
-                    // 若 2.5 不存在 (404) 或是額度問題 (429) 的提示
                     if (data.error.code === 404) {
-                        errorMsg = `找不到模型 (${modelName})。請確認 API 是否支援此版本，或嘗試切換至 2.0/1.5。`;
-                    } else if (data.error.code === 429) {
-                        errorMsg = `額度限制 (429)：請稍後重試，或切換其他模型。`;
+                        addMessage(`Error (404): Model <b>${modelName}</b> not found.
+                        <br>Cause: API Key permissions or model availability.
+                        <br>Suggestion: Try <b>Gemini 2.0 Flash</b> or <b>1.5 Flash</b>.`, "error");
+                    } else {
+                        addMessage(`API Error: ${data.error.message}`, "error");
                     }
-                    addMessage(`API 錯誤: ${errorMsg}`, "system");
                 } else if (data.candidates && data.candidates[0].content) {
                     const aiText = data.candidates[0].content.parts[0].text;
                     addMessage(aiText, "ai");
                 } else {
-                    addMessage("無法取得回應，請檢查 API Key 或網路狀態。", "system");
+                    addMessage("API response structure error. Please try again.", "system");
                 }
 
             } catch (error) {
                 if (loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
-                addMessage(`請求失敗: ${error.message}`, "system");
+                addMessage(`Request Failed: ${error.message}`, "error");
             }
         }
 
@@ -465,75 +572,56 @@
                 callGeminiAPI(text);
             }
         });
-
+        
         userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault(); 
-                sendBtn.click();
-            }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
         });
 
-        // --- 提取 PDF 文字邏輯 ---
+        // --- PDF Processing ---
         async function extractAllText(pdf) {
-            addMessage("正在讀取文件內容以供 AI 分析...", "system");
+            addMessage("Parsing PDF text in background...", "system");
             const loadingMsg = chatContainer.lastElementChild;
+            pdfPageTexts = new Array(pdf.numPages + 1).fill("");
             
-            let fullText = "";
             try {
-                const maxPages = pdf.numPages;
-                for (let i = 1; i <= maxPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    fullText += `[Page ${i}]\n${pageText}\n\n`;
+                const batchSize = 10;
+                for (let i = 1; i <= pdf.numPages; i+=batchSize) {
+                    const promises = [];
+                    for(let j=0; j<batchSize && (i+j) <= pdf.numPages; j++){
+                        promises.push(pdf.getPage(i+j).then(page => 
+                            page.getTextContent().then(content => {
+                                pdfPageTexts[i+j] = content.items.map(item => item.str).join(' ');
+                            })
+                        ));
+                    }
+                    await Promise.all(promises);
                 }
-                pdfFullText = fullText;
                 chatContainer.removeChild(loadingMsg);
-                addMessage(`已讀取 ${maxPages} 頁內容。`, "system");
+                addMessage(`Parsing complete (${pdf.numPages} pages).`, "system");
             } catch (e) {
-                chatContainer.removeChild(loadingMsg);
-                addMessage(`讀取文字失敗: ${e.message}`, "system");
+                if (loadingMsg.parentNode) chatContainer.removeChild(loadingMsg);
+                addMessage(`Parsing failed: ${e.message}`, "system");
             }
         }
 
-        // --- 閱讀器邏輯 ---
         document.getElementById('zoom-in').addEventListener('click', () => changeZoom(10));
         document.getElementById('zoom-out').addEventListener('click', () => changeZoom(-10));
 
         function changeZoom(delta) {
             const newWidth = currentWidthPercent + delta;
             if (newWidth < 20 || newWidth > 500) return; 
-
-            const viewportHeight = mainArea.clientHeight;
-            const scrollY = mainArea.scrollTop;
-            const centerY = scrollY + (viewportHeight / 2);
-            
-            let anchorPage = null;
-            let relativeRatio = 0;
-
-            const placeholders = document.querySelectorAll('.page-placeholder');
-            for (let page of placeholders) {
-                const pageTop = page.offsetTop;
-                if (centerY >= pageTop && centerY <= (pageTop + page.offsetHeight)) {
-                    anchorPage = page;
-                    relativeRatio = (centerY - pageTop) / page.offsetHeight;
-                    break;
-                }
-            }
-            if (!anchorPage && placeholders.length > 0) anchorPage = placeholders[0];
-
             currentWidthPercent = newWidth;
+            
             document.documentElement.style.setProperty('--page-width-percent', `${currentWidthPercent}%`);
+            zoomPercentLabel.textContent = `${currentWidthPercent}%`;
 
-            placeholders.forEach(div => unloadPage(div));
-
-            if (anchorPage) {
-                setTimeout(() => {
-                    const newScrollY = anchorPage.offsetTop + (anchorPage.offsetHeight * relativeRatio) - (viewportHeight / 2);
-                    mainArea.scrollTo(0, newScrollY);
-                }, 0);
-            }
-            startObserver();
+            document.querySelectorAll('.page-placeholder').forEach(div => {
+                if(div.querySelector('canvas')) {
+                    div.innerHTML = `<div class="loading-msg">Page ${div.dataset.pageNum}</div><div class="page-number-label">${div.dataset.pageNum}</div>`;
+                    observer.unobserve(div);
+                    observer.observe(div);
+                }
+            });
         }
 
         fileInput.addEventListener('change', async function(e) {
@@ -545,13 +633,15 @@
         });
 
         async function loadPDF(data) {
-            container.innerHTML = '<div style="color:white; margin-top:50px;">正在解析 PDF 結構...</div>';
+            container.innerHTML = '<div style="color:white; margin-top:50px;">Loading PDF structure...</div>';
             try {
                 pdfDoc = await pdfjsLib.getDocument(data).promise;
-                pageInfo.textContent = `共 ${pdfDoc.numPages} 頁`;
+                pageInfo.textContent = `${pdfDoc.numPages} Pages`;
                 jumpInput.max = pdfDoc.numPages;
                 container.innerHTML = '';
+                
                 extractAllText(pdfDoc);
+
                 const firstPage = await pdfDoc.getPage(1);
                 const viewport = firstPage.getViewport({ scale: 1 });
                 const aspectRatio = viewport.height / viewport.width;
@@ -559,9 +649,12 @@
                     createPagePlaceholder(i, aspectRatio);
                 }
                 startObserver();
+                
+                pageRangeInput.value = "";
+                document.querySelector('input[value="custom"]').checked = true;
+
             } catch (error) {
-                console.error(error);
-                container.innerHTML = `<div style="color:red; margin-top:50px;">錯誤: ${error.message}</div>`;
+                container.innerHTML = `<div style="color:red; margin-top:50px;">Error: ${error.message}</div>`;
             }
         }
 
@@ -571,22 +664,30 @@
             div.id = `page-container-${pageNum}`;
             div.dataset.pageNum = pageNum;
             div.style.aspectRatio = `${1 / aspectRatio}`; 
-            div.innerHTML = `<div class="loading-msg">第 ${pageNum} 頁 (載入中...)</div><div class="page-number-label">${pageNum}</div>`;
+            div.innerHTML = `<div class="loading-msg">Page ${pageNum}</div><div class="page-number-label">${pageNum}</div>`;
             container.appendChild(div);
         }
 
         let observer = null;
         function startObserver() {
             if (observer) observer.disconnect();
-            const options = { root: mainArea, rootMargin: '600px', threshold: 0 };
+            // Changed root from mainArea to pdfScroller because the scrollbar is there now
+            const options = { root: pdfScroller, rootMargin: '100px', threshold: [0, 0.1, 0.5] };
+            
             observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     const div = entry.target;
                     const pageNum = parseInt(div.dataset.pageNum);
+                    
                     if (entry.isIntersecting) {
                         renderPage(div, pageNum);
+                        if (entry.intersectionRatio > 0.3) {
+                            currentVisiblePage = pageNum;
+                        }
                     } else {
-                        unloadPage(div);
+                         if (div.querySelector('canvas')) {
+                            div.innerHTML = `<div class="loading-msg">Page ${pageNum}</div><div class="page-number-label">${pageNum}</div>`;
+                        }
                     }
                 });
             }, options);
@@ -594,7 +695,7 @@
         }
 
         async function renderPage(divContainer, pageNum) {
-            if (divContainer.querySelector('.textLayer')) return;
+            if (divContainer.querySelector('canvas')) return;
             try {
                 const page = await pdfDoc.getPage(pageNum);
                 const containerWidth = divContainer.clientWidth;
@@ -602,7 +703,7 @@
                 const scale = containerWidth / unscaledViewport.width;
                 const viewport = page.getViewport({ scale: scale });
 
-                divContainer.innerHTML = '';
+                divContainer.innerHTML = ''; 
                 const pageNumLabel = document.createElement('div');
                 pageNumLabel.className = 'page-number-label';
                 pageNumLabel.textContent = pageNum;
@@ -613,7 +714,6 @@
                 
                 const outputScale = window.devicePixelRatio || 1; 
                 let transformScale = outputScale * RENDER_SCALE_MULTIPLIER;
-
                 let pixelWidth = Math.floor(viewport.width * transformScale);
                 let pixelHeight = Math.floor(viewport.height * transformScale);
 
@@ -628,7 +728,6 @@
                 canvas.height = pixelHeight;
                 canvas.style.width = Math.floor(viewport.width) + "px";
                 canvas.style.height = Math.floor(viewport.height) + "px";
-
                 divContainer.appendChild(canvas);
 
                 const renderContext = {
@@ -644,24 +743,17 @@
                 textLayerDiv.style.height = Math.floor(viewport.height) + "px";
                 divContainer.appendChild(textLayerDiv);
 
-                const renderTask = page.render(renderContext);
-                const textTask = pdfjsLib.renderTextLayer({
+                await page.render(renderContext).promise;
+                pdfjsLib.renderTextLayer({
                     textContentSource: textContent,
                     container: textLayerDiv,
                     viewport: viewport,
                     textDivs: []
                 });
-                await Promise.all([renderTask.promise, textTask.promise]);
-            } catch (err) {
-                console.error(`Error rendering page ${pageNum}:`, err);
-                divContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:red;">渲染失敗</div>`;
-            }
-        }
 
-        function unloadPage(divContainer) {
-            if (divContainer.querySelector('.loading-msg')) return;
-            const pageNum = divContainer.dataset.pageNum;
-            divContainer.innerHTML = `<div class="loading-msg">第 ${pageNum} 頁</div><div class="page-number-label">${pageNum}</div>`;
+            } catch (err) {
+                console.error(err);
+            }
         }
 
         const jumpBtn = document.getElementById('jump-btn');
@@ -669,7 +761,10 @@
             const num = parseInt(jumpInput.value);
             if (num >= 1 && num <= pdfDoc.numPages) {
                 const target = document.getElementById(`page-container-${num}`);
-                if (target) target.scrollIntoView({ behavior: 'auto', block: 'start' });
+                if (target) {
+                    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+                    currentVisiblePage = num;
+                }
             }
         }
         jumpBtn.addEventListener('click', jumpToPage);
